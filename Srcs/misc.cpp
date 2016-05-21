@@ -111,7 +111,7 @@ const string engine_info(bool to_uci) {
   ss << (Is64Bit ? " 64" : "")
      << (HasPext ? " xBMI2" : (HasPopCnt ? " xMod" : ""))
      << (to_uci  ? "\nid author ": " by ")
-     << "Mohamed Nayeem, King Asad, St Peter\n"
+     << "Mohamed Nayeem\n"
 	 << "www.betachess.com";
   ss << (to_uci ? "" : "\n\ninfo string ")
 	 << (to_uci ? "" : std::to_string(n))

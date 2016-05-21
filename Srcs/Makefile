@@ -355,7 +355,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile stockfish, type: "
+	@echo "To compile Nayeem, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
