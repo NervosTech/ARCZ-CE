@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -13,8 +12,6 @@
   along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
 */
 
-extern int large_use; // BC
-
 #include <fstream>
 #include <iostream>
 #include <istream>
@@ -24,7 +21,6 @@ extern int large_use; // BC
 #include "position.h"
 #include "search.h"
 #include "thread.h"
-#include "tt.h"
 #include "uci.h"
 
 using namespace std;
@@ -79,7 +75,7 @@ const vector<string> Defaults = {
 
 } // namespace
 
-/// benchmark() runs a simple benchmark by letting Stockfish analyze a set
+/// benchmark() runs a simple benchmark by letting Chess analyze a set
 /// of positions for a given limit each. There are five parameters: the
 /// transposition table size, the number of search threads that should
 /// be used, the limit value spent for each position (optional, default is
@@ -147,7 +143,7 @@ void benchmark(const Position& current, istream& is) {
   for (size_t i = 0; i < fens.size(); ++i)
   {
       StateListPtr states(new std::deque<StateInfo>(1));
-	  pos.set(fens[i], Options["UCI_Chess960"], &states->back(), Threads.main());
+      pos.set(fens[i], Options["UCI_Chess960"], &states->back(), Threads.main());
 
       cerr << "\nPosition: " << i + 1 << '/' << fens.size() << endl;
 
@@ -165,10 +161,8 @@ void benchmark(const Position& current, istream& is) {
 
   elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
 
-  dbg_print(); // Just before to exit
-  
-if(!large_use) // BC
-	cerr << "****\n";
+  dbg_print(); // Just before exiting
+
   cerr << "\n==========================="
        << "\nTotal time (ms) : " << elapsed
        << "\nNodes searched  : " << nodes

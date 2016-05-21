@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -20,11 +19,11 @@
 /// relies on libwinpthread. Currently libwinpthread implements mutexes directly
 /// on top of Windows semaphores. Semaphores, being kernel objects, require kernel
 /// mode transition in order to lock or unlock, which is very slow compared to
-/// interlocked operations (about 30% slower on bench test). To workaround this
+/// interlocked operations (about 30% slower on bench test). To work around this
 /// issue, we define our wrappers to the low level Win32 calls. We use critical
 /// sections to support Windows XP and older versions. Unfortunately, cond_wait()
 /// is racy between unlock() and WaitForSingleObject() but they have the same
-/// speed performance of SRW locks.
+/// speed performance as the SRW locks.
 
 #include <condition_variable>
 #include <mutex>
@@ -54,6 +53,7 @@ private:
 };
 
 typedef std::condition_variable_any ConditionVariable;
+
 #else // Default case: use STL classes
 
 typedef std::mutex Mutex;

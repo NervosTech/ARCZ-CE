@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -63,10 +62,10 @@ namespace {
 /// ordering is at the current node.
 
 MovePicker::MovePicker(const Position& p, Move ttm, Depth d, Search::Stack* s)
-            : pos(p), ss(s), depth(d) {
+           : pos(p), ss(s), depth(d) {
 
   assert(d > DEPTH_ZERO);
-  
+
   Square prevSq = to_sq((ss-1)->currentMove);
   countermove = pos.this_thread()->counterMoves[pos.piece_on(prevSq)][prevSq];
 
@@ -135,18 +134,18 @@ void MovePicker::score<CAPTURES>() {
 
 template<>
 void MovePicker::score<QUIETS>() {
-	
+
   const HistoryStats& history = pos.this_thread()->history;
-  
+
   const CounterMoveStats* cm = (ss-1)->counterMoves;
   const CounterMoveStats* fm = (ss-2)->counterMoves;
   const CounterMoveStats* f2 = (ss-4)->counterMoves;
 
   for (auto& m : *this)
-      m.value =      history[pos.moved_piece(m)][to_sq(m)]
-               + (cm ? (*cm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-			   + (fm ? (*fm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-			   + (f2 ? (*f2)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO);
+      m.value =          history[pos.moved_piece(m)][to_sq(m)]
+               + (cm ? 3 * (*cm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
+               + (fm ? 2 * (*fm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
+               + (f2 ?     (*f2)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO);
 }
 
 template<>
@@ -198,11 +197,11 @@ void MovePicker::generate_next_stage() {
       endMoves = generate<QUIETS>(pos, moves);
       score<QUIETS>();
       if (depth < 3 * ONE_PLY)
-	  {
-		  ExtMove* goodQuiet = std::partition(cur, endMoves, [](const ExtMove& m)
-		                                     { return m.value > VALUE_ZERO; });
+      {
+          ExtMove* goodQuiet = std::partition(cur, endMoves, [](const ExtMove& m)
+                                             { return m.value > VALUE_ZERO; });
           insertion_sort(cur, goodQuiet);
-	  } else
+      } else
           insertion_sort(cur, endMoves);
       break;
 

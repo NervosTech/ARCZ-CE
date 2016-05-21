@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -27,9 +26,6 @@
 #include "tt.h"
 #include "uci.h"
 
-#define MEMALIGN(a, b, c) a = _aligned_malloc (c, b) 
-#define ALIGNED_FREE(x) _aligned_free (x) // BRICE
-
 using std::string;
 
 namespace Zobrist {
@@ -52,7 +48,7 @@ const string PieceToChar(" PNBRQK  pnbrqk");
 // from the bitboards and scan for new X-ray attacks behind it.
 
 template<int Pt>
-PieceType min_attacker(const Bitboard* bb, const Square& to, const Bitboard& stmAttackers,
+PieceType min_attacker(const Bitboard* bb, Square to, Bitboard stmAttackers,
                        Bitboard& occupied, Bitboard& attackers) {
 
   Bitboard b = stmAttackers & bb[Pt];
@@ -72,7 +68,7 @@ PieceType min_attacker(const Bitboard* bb, const Square& to, const Bitboard& stm
 }
 
 template<>
-PieceType min_attacker<KING>(const Bitboard*, const Square&, const Bitboard&, Bitboard&, Bitboard&) {
+PieceType min_attacker<KING>(const Bitboard*, Square, Bitboard, Bitboard&, Bitboard&) {
   return KING; // No need to update bitboards: it is the last cycle
 }
 
@@ -201,7 +197,7 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
   std::memset(si, 0, sizeof(StateInfo));
   std::fill_n(&pieceList[0][0][0], sizeof(pieceList) / sizeof(Square), SQ_NONE);
   st = si;
-  
+
   ss >> std::noskipws;
 
   // 1. Piece placement
@@ -263,7 +259,7 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
           st->epSquare = SQ_NONE;
   }
   else
-	  st->epSquare = SQ_NONE;
+      st->epSquare = SQ_NONE;
 
   // 5-6. Halfmove clock and fullmove number
   ss >> std::skipws >> st->rule50 >> gamePly;
@@ -277,7 +273,7 @@ Position& Position::set(const string& fenStr, bool isChess960, StateInfo* si, Th
   set_state(st);
 
   assert(pos_is_ok());
-  
+
   return *this;
 }
 
@@ -405,7 +401,6 @@ const string Position::fen() const {
 }
 
 
-
 /// Position::game_phase() calculates the game phase interpolating total non-pawn
 /// material between endgame and midgame limits.
 
@@ -419,30 +414,34 @@ Phase Position::game_phase() const {
 }
 
 
-/// Position::check_blockers() returns a bitboard of all the pieces with color
-/// 'c' that are blocking check on the king with color 'kingColor'. A piece
-/// blocks a check if removing that piece from the board would result in a
-/// position where the king is in check. A check blocking piece can be either a
-/// pinned or a discovered check piece, according if its color 'c' is the same
-/// or the opposite of 'kingColor'.
+/// Position::slider_blockers() returns a bitboard of all the pieces with color
+/// 'c1' that are blocking sliders attacks on the square 's' of color 'c2'. A piece
+/// blocks a slider if removing that piece from the board would result in a position
+/// where square 's' is attacked. For example, a king attack blocking piece can be either 
+/// a pinned or a discovered check piece, according if its color 'c1' is the same or
+/// the opposite of 'c2'.
 
-Bitboard Position::check_blockers(Color c, Color kingColor) const {
+Bitboard Position::slider_blockers(Color c1, Square s, Color c2, bool WithQueens) const {
 
-  Bitboard b, pinners, result = 0;
-  Square ksq = square<KING>(kingColor);
+  Bitboard b, pinners, result = 0, p = pieces();
 
-  // Pinners are sliders that give check when a pinned piece is removed
-  pinners = (  (pieces(  ROOK, QUEEN) & PseudoAttacks[ROOK  ][ksq])
-             | (pieces(BISHOP, QUEEN) & PseudoAttacks[BISHOP][ksq])) & pieces(~kingColor);
+  // Pinners are sliders that attack s when a pinned piece is removed
+  pinners = pieces(~c2);
+  if (WithQueens)
+      pinners &=  (PseudoAttacks[ROOK  ][s] & pieces(QUEEN, ROOK))
+                | (PseudoAttacks[BISHOP][s] & pieces(QUEEN, BISHOP));
+  else
+      pinners &=  (PseudoAttacks[ROOK  ][s] & pieces(ROOK))
+                | (PseudoAttacks[BISHOP][s] & pieces(BISHOP));
 
   while (pinners)
   {
-      b = between_bb(ksq, pop_lsb(&pinners)) & pieces();
+      b = between_bb(s, pop_lsb(&pinners)) & p;
 
       if (!more_than_one(b))
-          result |= b & pieces(c);
+          result |= b;
   }
-  return result;
+  return result & pieces(c1);
 }
 
 
@@ -1110,13 +1109,11 @@ bool Position::pos_is_ok(int* failedStep) const {
                   && relative_rank(sideToMove, ep_square()) != RANK_6))
               return false;
 
-
       if (step == King)
           if (   std::count(board, board + SQUARE_NB, W_KING) != 1
               || std::count(board, board + SQUARE_NB, B_KING) != 1
               || attackers_to(square<KING>(~sideToMove)) & pieces(sideToMove))
               return false;
-
 
       if (step == Bitboards)
       {

@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -21,8 +20,6 @@
 
 TranspositionTable TT; // Our global transposition table
 
-void CREATE_MEM2(void **,uint64_t);
-void FREE_MEM(void *);
 
 /// TranspositionTable::resize() sets the size of the transposition table,
 /// measured in megabytes. Transposition table consists of a power of 2 number
@@ -37,17 +34,8 @@ void TranspositionTable::resize(size_t mbSize) {
 
   clusterCount = newClusterCount;
 
-  mem = nullptr;
-  FREE_MEM(mem);
-  CREATE_MEM2(&mem, clusterCount * sizeof(Cluster));
-  large_use = true;
-  
-  if (!mem)
-  {
   free(mem);
   mem = calloc(clusterCount * sizeof(Cluster) + CacheLineSize - 1, 1);
-    large_use = false;
-  }
 
   if (!mem)
   {

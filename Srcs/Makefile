@@ -11,6 +11,7 @@
 # along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
 
 
+
 ### ==========================================================================
 ### Section 1. General Configuration
 ### ==========================================================================
@@ -19,7 +20,7 @@
 UNAME = $(shell uname)
 
 ### Executable name
-EXE = Nayeem 
+EXE = Nayeem
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -29,8 +30,8 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = ./$(EXE) bench 16 1 1000 default time
 
 ### Object files
-OBJS = benchmark.o bitbase.o bitboard.o book.o endgame.o evaluate.o main.o \
-	material.o misc.o movegen.o movepick.o opt.o pawns.o position.o psqt.o \
+OBJS = benchmark.o bitbase.o bitboard.o endgame.o evaluate.o main.o \
+	material.o misc.o movegen.o movepick.o pawns.o position.o psqt.o \
 	search.o thread.o timeman.o tt.o uci.o ucioption.o syzygy/tbprobe.o
 
 ### ==========================================================================
@@ -73,7 +74,7 @@ ifeq ($(ARCH),x86-64-avx)
 	sse = yes
 	avx = yes
 endif
-
+	
 ifeq ($(ARCH),general-32)
 	arch = any
 endif
@@ -354,7 +355,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile Nayeem , type: "
+	@echo "To compile stockfish, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""

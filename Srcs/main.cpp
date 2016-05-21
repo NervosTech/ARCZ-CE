@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -24,17 +23,11 @@
 #include "uci.h"
 #include "syzygy/tbprobe.h"
 
-void SETUP_PRIVILEGES();
-void FREE_MEM(void *);
-
 int main(int argc, char* argv[]) {
 
   std::cout << engine_info() << std::endl;
-  #ifndef BENCH
-    SETUP_PRIVILEGES();
-  #endif
+
   UCI::init(Options);
-  TT.resize(Options["Hash"]);
   Tune::init();
   PSQT::init();
   Bitboards::init();
@@ -45,13 +38,10 @@ int main(int argc, char* argv[]) {
   Pawns::init();
   Threads.init();
   Tablebases::init(Options["SyzygyPath"]);
+  TT.resize(Options["Hash"]);
 
   UCI::loop(argc, argv);
 
-  if (large_use) {
-    FREE_MEM(TT.mem);  
-    TT.mem = nullptr;
-  }
-
   Threads.exit();
+  return 0;
 }

@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -59,7 +58,6 @@ private:
 typedef Stats<Move> MoveStats;
 typedef Stats<Value, false> HistoryStats;
 typedef Stats<Value,  true> CounterMoveStats;
-
 typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
 
 
@@ -73,7 +71,7 @@ typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
 class MovePicker {
 public:
   MovePicker(const MovePicker&) = delete;
-MovePicker& operator=(const MovePicker&) = delete;
+  MovePicker& operator=(const MovePicker&) = delete;
 
   MovePicker(const Position&, Move, Value);
   MovePicker(const Position&, Move, Depth, Square);

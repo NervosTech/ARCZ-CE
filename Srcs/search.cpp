@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -20,7 +19,6 @@
 #include <iostream>
 #include <sstream>
 
-#include "book.h"
 #include "evaluate.h"
 #include "misc.h"
 #include "movegen.h"
@@ -61,7 +59,7 @@ namespace {
 
   // Razoring and futility margin based on depth
   const int razor_margin[4] = { 483, 570, 603, 554 };
-  Value futility_margin(Depth d) { return Value(200 * d); }
+  Value futility_margin(Depth d, bool cutNode = false) { return Value((200 - 70 * cutNode) * d); }
 
   // Futility and reductions lookup tables, initialized at startup
   int FutilityMoveCounts[2][16];  // [improving][depth]
@@ -122,6 +120,35 @@ namespace {
     Move pv[3];
   };
 
+  // Set of rows with half bits set to 1 and half to 0. It is used to allocate
+  // the search depths across the threads.
+  typedef std::vector<int> Row;
+
+  const Row HalfDensity[] = {
+    {0, 1},
+    {1, 0},
+    {0, 0, 1, 1},
+    {0, 1, 1, 0},
+    {1, 1, 0, 0},
+    {1, 0, 0, 1},
+    {0, 0, 0, 1, 1, 1},
+    {0, 0, 1, 1, 1, 0},
+    {0, 1, 1, 1, 0, 0},
+    {1, 1, 1, 0, 0, 0},
+    {1, 1, 0, 0, 0, 1},
+    {1, 0, 0, 0, 1, 1},
+    {0, 0, 0, 0, 1, 1, 1, 1},
+    {0, 0, 0, 1, 1, 1, 1, 0},
+    {0, 0, 1, 1, 1, 1, 0 ,0},
+    {0, 1, 1, 1, 1, 0, 0 ,0},
+    {1, 1, 1, 1, 0, 0, 0 ,0},
+    {1, 1, 1, 0, 0, 0, 0 ,1},
+    {1, 1, 0, 0, 0, 0, 1 ,1},
+    {1, 0, 0, 0, 0, 1, 1 ,1},
+  };
+
+  const size_t HalfDensitySize = std::extent<decltype(HalfDensity)>::value;
+
   EasyMoveManager EasyMove;
   Value DrawValue[COLOR_NB];
   CounterMoveHistoryStats CounterMoveHistory;
@@ -145,22 +172,21 @@ namespace {
 
 void Search::init() {
 
-  const double K[][2] = {{ 0.799, 2.281 }, { 0.484, 3.023 }};
+  for (int imp = 0; imp <= 1; ++imp)
+      for (int d = 1; d < 64; ++d)
+          for (int mc = 1; mc < 64; ++mc)
+          {
+              double r = log(d) * log(mc) / 2;
+              if (r < 0.80)
+                continue;
 
-  for (int pv = 0; pv <= 1; ++pv)
-      for (int imp = 0; imp <= 1; ++imp)
-          for (int d = 1; d < 64; ++d)
-              for (int mc = 1; mc < 64; ++mc)
-              {
-                  double r = K[pv][0] + log(d) * log(mc) / K[pv][1];
+              Reductions[NonPV][imp][d][mc] = int(std::round(r)) * ONE_PLY;
+              Reductions[PV][imp][d][mc] = std::max(Reductions[NonPV][imp][d][mc] - ONE_PLY, DEPTH_ZERO);
 
-                  if (r >= 1.5)
-                      Reductions[pv][imp][d][mc] = int(r) * ONE_PLY;
-
-                  // Increase reduction when eval is not improving
-                  if (!pv && !imp && Reductions[pv][imp][d][mc] >= 2 * ONE_PLY)
-                      Reductions[pv][imp][d][mc] += ONE_PLY;
-              }
+              // Increase reduction for non-PV nodes when eval is not improving
+              if (!imp && Reductions[NonPV][imp][d][mc] >= 2 * ONE_PLY)
+                Reductions[NonPV][imp][d][mc] += ONE_PLY;
+          }
 
   for (int d = 0; d < 16; ++d)
   {
@@ -218,11 +244,9 @@ template uint64_t Search::perft<true>(Position&, Depth);
 
 
 /// MainThread::search() is called by the main thread when the program receives
-/// the UCI 'go' command. It searches from root position and at the end prints
-/// the "bestmove" to output.
+/// the UCI 'go' command. It searches from the root position and outputs the "bestmove".
 
 void MainThread::search() {
-  static PolyglotBook book; // Defined static to initialize the PRNG only once
 
   Color us = rootPos.side_to_move();
   Time.init(Limits, us, rootPos.game_ply());
@@ -253,19 +277,9 @@ void MainThread::search() {
   }
   else
   {
-      if (Options["OwnBook"] && !Limits.infinite && !Limits.mate)
-      {
-          Move bookMove = book.probe(rootPos, Options["Book File"], Options["Best Book Line"]);
-
-          if (bookMove && std::count(rootMoves.begin(), rootMoves.end(), bookMove))
-          {
-              std::swap(rootMoves[0], *std::find(rootMoves.begin(), rootMoves.end(), bookMove));
-              goto finalize;
-          }
-      }
-
-      if (TB::Cardinality >=  rootPos.count<ALL_PIECES>(WHITE)
-                            + rootPos.count<ALL_PIECES>(BLACK))
+      if (    TB::Cardinality >=  rootPos.count<ALL_PIECES>(WHITE)
+                                + rootPos.count<ALL_PIECES>(BLACK)
+          && !rootPos.can_castle(ANY_CASTLING))
       {
           // If the current root position is in the tablebases, then RootMoves
           // contains only moves that preserve the draw or the win.
@@ -306,7 +320,7 @@ void MainThread::search() {
   // the available ones before exiting.
   if (Limits.npmsec)
       Time.availableNodes += Limits.inc[us] - Threads.nodes_searched();
-finalize:
+
   // When we reach the maximum depth, we can arrive here without a raise of
   // Signals.stop. However, if we are pondering or in an infinite search,
   // the UCI protocol states that we shouldn't print the best move before the
@@ -330,9 +344,9 @@ finalize:
   Thread* bestThread = this;
   if (   !this->easyMovePlayed
       &&  Options["MultiPV"] == 1
-	  && !Limits.depth
+      && !Limits.depth
       && !Skill(Options["Skill Level"]).enabled()
-	  &&  rootMoves[0].pv[0] != MOVE_NONE)
+      &&  rootMoves[0].pv[0] != MOVE_NONE)
   {
       for (Thread* th : Threads)
           if (   th->completedDepth > bestThread->completedDepth
@@ -395,27 +409,12 @@ void Thread::search() {
   while (++rootDepth < DEPTH_MAX && !Signals.stop && (!Limits.depth || Threads.main()->rootDepth <= Limits.depth))
   {
       // Set up the new depths for the helper threads skipping on average every
-      // 2nd ply (using a half-density map similar to a Hadamard matrix).
+      // 2nd ply (using a half-density matrix).
       if (!mainThread)
       {
-          int d = rootDepth + rootPos.game_ply();
-
-          if (idx <= 6 || idx > 24)
-          {
-              if (((d + idx) >> (msb(idx + 1) - 1)) % 2)
-                  continue;
-          }
-          else
-          {
-              // Table of values of 6 bits with 3 of them set
-              static const int HalfDensityMap[] = {
-                0x07, 0x0b, 0x0d, 0x0e, 0x13, 0x16, 0x19, 0x1a, 0x1c,
-                0x23, 0x25, 0x26, 0x29, 0x2c, 0x31, 0x32, 0x34, 0x38
-              };
-
-              if ((HalfDensityMap[idx - 7] >> (d % 6)) & 1)
-                  continue;
-          }
+          const Row& row = HalfDensity[(idx - 1) % HalfDensitySize];
+          if (row[(rootDepth + rootPos.game_ply()) % row.size()])
+             continue;
       }
 
       // Age out PV variability metric
@@ -654,7 +653,7 @@ namespace {
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
     ss->currentMove = (ss+1)->excludedMove = bestMove = MOVE_NONE;
-	ss->counterMoves = nullptr;
+    ss->counterMoves = nullptr;
     (ss+1)->skipEarlyPruning = false;
     (ss+2)->killers[0] = (ss+2)->killers[1] = MOVE_NONE;
 
@@ -692,7 +691,8 @@ namespace {
 
         if (    piecesCnt <= TB::Cardinality
             && (piecesCnt <  TB::Cardinality || depth >= TB::ProbeDepth)
-            &&  pos.rule50_count() == 0)
+            &&  pos.rule50_count() == 0
+            && !pos.can_castle(ANY_CASTLING))
         {
             int found, v = Tablebases::probe_wdl(pos, &found);
 
@@ -765,10 +765,10 @@ namespace {
     // Step 7. Futility pruning: child node (skipped when in check)
     if (   !rootNode
         &&  depth < 7 * ONE_PLY
-        &&  eval - futility_margin(depth) >= beta
+        &&  eval - futility_margin(depth, cutNode) >= beta
         &&  eval < VALUE_KNOWN_WIN  // Do not return unproven wins
         &&  pos.non_pawn_material(pos.side_to_move()))
-        return eval - futility_margin(depth);
+        return eval - futility_margin(depth, cutNode);
 
     // Step 8. Null move search with verification search (is omitted in PV nodes)
     if (   !PvNode
@@ -777,7 +777,7 @@ namespace {
         &&  pos.non_pawn_material(pos.side_to_move()))
     {
         ss->currentMove = MOVE_NULL;
-		ss->counterMoves = nullptr;
+        ss->counterMoves = nullptr;
 
         assert(eval - beta >= 0);
 
@@ -833,7 +833,7 @@ namespace {
             if (pos.legal(move, ci.pinned))
             {
                 ss->currentMove = move;
-				ss->counterMoves = &CounterMoveHistory[pos.moved_piece(move)][to_sq(move)];
+                ss->counterMoves = &CounterMoveHistory[pos.moved_piece(move)][to_sq(move)];
                 pos.do_move(move, st, pos.gives_check(move, ci));
                 value = -search<NonPV>(pos, ss+1, -rbeta, -rbeta+1, rdepth, !cutNode);
                 pos.undo_move(move);
@@ -951,8 +951,7 @@ moves_loop: // When in check search starts from here
       {
           // Move count based pruning
           if (   depth < 16 * ONE_PLY
-              && moveCount >= FutilityMoveCounts[improving][depth]
-              && cmh[pos.moved_piece(move)][to_sq(move)] < 13991 - 222 * depth / ONE_PLY)
+              && moveCount >= FutilityMoveCounts[improving][depth])
               continue;
 
           // Countermoves based pruning
@@ -993,7 +992,7 @@ moves_loop: // When in check search starts from here
       }
 
       ss->currentMove = move;
-	  ss->counterMoves = &CounterMoveHistory[moved_piece][to_sq(move)];
+      ss->counterMoves = &CounterMoveHistory[moved_piece][to_sq(move)];
 
       // Step 14. Make the move
       pos.do_move(move, st, givesCheck);
@@ -1011,12 +1010,15 @@ moves_loop: // When in check search starts from here
                      +    (fmh2 ? (*fmh2)[moved_piece][to_sq(move)] : VALUE_ZERO);
 
           // Increase reduction for cut nodes
-		  if (!PvNode && cutNode)
+          if (!PvNode && cutNode)
               r += ONE_PLY;
 
           // Decrease/increase reduction for moves with a good/bad history
           int rHist = (val - 10000) / 20000;
           r = std::max(DEPTH_ZERO, r - rHist * ONE_PLY);
+		  
+		  if (PvNode && extension)
+			  r = std::max(DEPTH_ZERO, r - ONE_PLY);
 
           // Decrease reduction for moves that escape a capture. Filter out
           // castling moves, because they are coded as "king captures rook" and
@@ -1160,13 +1162,13 @@ moves_loop: // When in check search starts from here
     {
         Value bonus = Value((depth / ONE_PLY) * (depth / ONE_PLY) + depth / ONE_PLY - 1);
         if ((ss-2)->counterMoves)
-			(ss-2)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
-		
-		if ((ss-3)->counterMoves)
-			(ss-3)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
-		
-		if ((ss-5)->counterMoves)
-			(ss-5)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
+            (ss-2)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
+
+        if ((ss-3)->counterMoves)
+            (ss-3)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
+
+        if ((ss-5)->counterMoves)
+            (ss-5)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
     }
 
     tte->save(posKey, value_to_tt(bestValue, ss->ply),
@@ -1188,6 +1190,7 @@ moves_loop: // When in check search starts from here
   Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
 
     const bool PvNode = NT == PV;
+
     assert(InCheck == !!pos.checkers());
     assert(alpha >= -VALUE_INFINITE && alpha < beta && beta <= VALUE_INFINITE);
     assert(PvNode || (alpha == beta - 1));
@@ -1425,8 +1428,8 @@ moves_loop: // When in check search starts from here
   }
 
 
-  // update_stats() updates killers, history, countermove and countermove
-  // history when a new quiet best move is found.
+  // update_stats() updates killers, history, countermove and countermove plus
+  // follow-up move history when a new quiet best move is found.
 
   void update_stats(const Position& pos, Stack* ss, Move move,
                     Depth depth, Move* quiets, int quietsCnt) {
@@ -1440,9 +1443,9 @@ moves_loop: // When in check search starts from here
     Value bonus = Value((depth / ONE_PLY) * (depth / ONE_PLY) + depth / ONE_PLY - 1);
 
     Square prevSq = to_sq((ss-1)->currentMove);
-	CounterMoveStats* cmh  = (ss-1)->counterMoves;
+    CounterMoveStats* cmh  = (ss-1)->counterMoves;
     CounterMoveStats* fmh  = (ss-2)->counterMoves;
-	CounterMoveStats* fmh2 = (ss-4)->counterMoves;
+    CounterMoveStats* fmh2 = (ss-4)->counterMoves;
     Thread* thisThread = pos.this_thread();
 
     thisThread->history.update(pos.moved_piece(move), to_sq(move), bonus);
@@ -1455,9 +1458,9 @@ moves_loop: // When in check search starts from here
 
     if (fmh)
         fmh->update(pos.moved_piece(move), to_sq(move), bonus);
-	
-	if (fmh2)
-		fmh2->update(pos.moved_piece(move), to_sq(move), bonus);
+
+    if (fmh2)
+        fmh2->update(pos.moved_piece(move), to_sq(move), bonus);
 
     // Decrease all the other played quiet moves
     for (int i = 0; i < quietsCnt; ++i)
@@ -1469,22 +1472,22 @@ moves_loop: // When in check search starts from here
 
         if (fmh)
             fmh->update(pos.moved_piece(quiets[i]), to_sq(quiets[i]), -bonus);
-		
-		if (fmh2)
-			fmh2->update(pos.moved_piece(quiets[i]), to_sq(quiets[i]), -bonus);
+
+        if (fmh2)
+            fmh2->update(pos.moved_piece(quiets[i]), to_sq(quiets[i]), -bonus);
     }
 
     // Extra penalty for a quiet TT move in previous ply when it gets refuted
     if ((ss-1)->moveCount == 1 && !pos.captured_piece_type())
     {
         if ((ss-2)->counterMoves)
-			(ss-2)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
-		
-		if ((ss-3)->counterMoves)
-			(ss-3)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
-		
-		if ((ss-5)->counterMoves)
-			(ss-5)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
+            (ss-2)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
+
+        if ((ss-3)->counterMoves)
+            (ss-3)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
+
+        if ((ss-5)->counterMoves)
+            (ss-5)->counterMoves->update(pos.piece_on(prevSq), prevSq, -bonus - 2 * (depth + 1) / ONE_PLY);
     }
   }
 

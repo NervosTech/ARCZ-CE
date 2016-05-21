@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -95,7 +94,7 @@ namespace {
                 + sides[1] + char(8 - sides[1].length() + '0') + " w - - 0 10";
 
     StateInfo st;
-	return Position().set(fen, false, &st, nullptr).material_key();
+    return Position().set(fen, false, &st, nullptr).material_key();
   }
 
 } // namespace

@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -61,7 +60,7 @@ const Score Bonus[][RANK_NB][int(FILE_NB) / 2] = {
    { S(-45,-65), S(-21,-42), S(-29,-46), S(-39,-27) }
   },
   { // Rook
-   { S(-25, 0), S(-16, 0), S(-16, 0), S(-9, 0) },
+   { S(-25, 0), S(-16, 0), S(-10, 0), S( 6, 0) },
    { S(-21, 0), S( -8, 0), S( -3, 0), S( 0, 0) },
    { S(-21, 0), S( -9, 0), S( -4, 0), S( 2, 0) },
    { S(-22, 0), S( -6, 0), S( -1, 0), S( 2, 0) },

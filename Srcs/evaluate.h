@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -27,9 +26,10 @@ namespace Eval {
 const Value Tempo = Value(20); // Must be visible to search
 
 void init();
-Value evaluate(const Position& pos);
 std::string trace(const Position& pos);
 
+template<bool DoTrace = false>
+Value evaluate(const Position& pos);
 }
 
 #endif // #ifndef EVALUATE_H_INCLUDED

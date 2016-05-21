@@ -16,6 +16,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 #include "misc.h"
 #include "thread.h"
@@ -96,6 +97,8 @@ const string engine_info(bool to_uci) {
   const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
   string month, day, year;
   stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
+  
+  unsigned int n = std::thread::hardware_concurrency();
 
   ss << "" << Version << setfill('0');
 
@@ -110,7 +113,10 @@ const string engine_info(bool to_uci) {
      << (to_uci  ? "\nid author ": " by ")
      << "Mohamed Nayeem, King Asad, St Peter\n"
 	 << "www.betachess.com";
-
+  ss << (to_uci ? "" : "\n\ninfo string ")
+	 << (to_uci ? "" : std::to_string(n))
+	 << (to_uci ? "" : " processor(s) detected")
+	 << (to_uci ? "" : "\ninfo string 16 MB Hash");
   return ss.str();
 }
 

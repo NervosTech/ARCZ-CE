@@ -1,6 +1,5 @@
 /*
-  Nayeem - A UCI chess engine derived from Stockfish.
-  Copyright (C) 2016 Mohamed Nayeem
+  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
   Nayeem is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
@@ -58,7 +57,6 @@
 #  include <intrin.h> // Microsoft header for _BitScanForward64()
 #  define IS_64BIT
 #endif
-
 
 #if defined(USE_POPCNT) && (defined(__INTEL_COMPILER) || defined(_MSC_VER))
 #  include <nmmintrin.h> // Intel and Microsoft header for _mm_popcnt_u64()
@@ -131,7 +129,7 @@ enum CastlingSide {
   KING_SIDE, QUEEN_SIDE, CASTLING_SIDE_NB = 2
 };
 
-enum CastlingRight {  // Defined as in PolyGlot book hash key
+enum CastlingRight {
   NO_CASTLING,
   WHITE_OO,
   WHITE_OOO = WHITE_OO << 1,
@@ -423,4 +421,4 @@ inline bool is_ok(Move m) {
 
 #endif // #ifndef TYPES_H_INCLUDED
 
-#include "tune.h" // Global visibility to tuning setup
+#include "tune.h" // Global visibility to tuning setup 
