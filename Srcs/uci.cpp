@@ -24,6 +24,10 @@
 #include "timeman.h"
 #include "uci.h"
 
+#ifdef LOMONOSOV_TB
+#include "lmtb.h"
+#endif
+
 using namespace std;
 
 extern void benchmark(const Position& pos, istream& is);
@@ -208,6 +212,13 @@ void UCI::loop(int argc, char* argv[]) {
 
   } while (token != "quit" && argc == 1); // Passed args have one-shot behaviour
 
+#ifdef LOMONOSOV_TB
+#ifndef TB_DLL_EXPORT
+  if (UCI::tb_stat) tb_print_statistics("full_tb_statistics.txt");
+#endif
+  unload_lomonosov_tb();
+#endif
+
   Threads.main()->wait_for_search_finished();
 }
 
@@ -227,6 +238,16 @@ string UCI::value(Value v) {
       ss << "cp " << v * 100 / PawnValueEg;
   else
       ss << "mate " << (v > 0 ? VALUE_MATE - v + 1 : -VALUE_MATE - v) / 2;
+
+  return ss.str();
+}
+
+
+string UCI::mate_value(Value v) {
+
+  stringstream ss;
+
+  ss << "mate " << (v > 0 ? VALUE_MATE - v + 1 : -VALUE_MATE - v) / 2;
 
   return ss.str();
 }

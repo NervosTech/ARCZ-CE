@@ -100,4 +100,12 @@ template<bool Root = true> uint64_t perft(Position& pos, Depth depth);
 
 } // namespace Search
 
+#ifdef LOMONOSOV_TB
+namespace Tablebases {
+extern bool lomonosov_tb_use_opt;
+extern bool use_tables;
+extern int max_tb_pieces;
+}
+#endif
+
 #endif // #ifndef SEARCH_H_INCLUDED

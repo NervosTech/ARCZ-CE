@@ -21,7 +21,14 @@
 #include "thread.h"
 #include "tt.h"
 #include "uci.h"
+
+#ifdef SYZYGY_TB
 #include "syzygy/tbprobe.h"
+#endif
+
+#ifdef LOMONOSOV_TB
+#include "lomonosov_probe.h"
+#endif
 
 int main(int argc, char* argv[]) {
 
@@ -37,8 +44,17 @@ int main(int argc, char* argv[]) {
   Eval::init();
   Pawns::init();
   Threads.init();
-  Tablebases::init(Options["SyzygyPath"]);
   TT.resize(Options["Hash"]);
+
+#ifdef SYZYGY_TB
+  Tablebases::init(Options["SyzygyPath"]);
+#endif
+
+#ifdef LOMONOSOV_TB
+  //init Lomonosov TB
+  int result = lomonosov_change_server_mode(Options["Lomonosov Server Mode"], Options["Lomonosov Server Console"]);
+  sync_cout << "Lomonosov tables are" << (result == -1 ? " not" : "") << " loaded" << sync_endl;
+#endif
 
   UCI::loop(argc, argv);
 

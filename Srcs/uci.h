@@ -24,6 +24,12 @@ class Position;
 
 namespace UCI {
 
+#ifdef LOMONOSOV_TB
+#ifndef TB_DLL_EXPORT
+	extern bool tb_stat;
+#endif
+#endif
+
 class Option;
 
 /// Custom comparator because UCI options should be case insensitive
@@ -62,6 +68,7 @@ private:
 void init(OptionsMap&);
 void loop(int argc, char* argv[]);
 std::string value(Value v);
+std::string mate_value(Value v);
 std::string square(Square s);
 std::string move(Move m, bool chess960);
 std::string pv(const Position& pos, Depth depth, Value alpha, Value beta);
