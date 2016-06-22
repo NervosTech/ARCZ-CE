@@ -27,7 +27,7 @@ namespace {
 
 /// Version number. If Version is left empty, then compile date in the format
 /// DD-MM-YY and show in engine_info.
-static const string Version = "Nayeem 6.3";
+static const string Version = "Nayeem 7.0 Beta";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -116,7 +116,7 @@ const string engine_info(bool to_uci) {
 	 << "www.betachess.com";
   ss << (to_uci ? "" : "\n\ninfo string ")
 	 << (to_uci ? "" : std::to_string(n))
-	 << (to_uci ? "" : " processor(s) detected")
+	 << (to_uci ? "" : " Cpu(s) detected")
 	 << (to_uci ? "" : "\ninfo string 16 MB Hash");
   return ss.str();
 }
