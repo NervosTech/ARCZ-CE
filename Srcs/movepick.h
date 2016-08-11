@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef MOVEPICK_H_INCLUDED
@@ -60,6 +62,26 @@ typedef Stats<Value, false> HistoryStats;
 typedef Stats<Value,  true> CounterMoveStats;
 typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
 
+struct FromToStats {
+
+    Value get(Color c, Move m) const { return table[c][from_sq(m)][to_sq(m)]; }
+    void clear() { std::memset(table, 0, sizeof(table)); }
+
+    void update(Color c, Move m, Value v)
+    {
+        if (abs(int(v)) >= 324)
+            return;
+
+        Square f = from_sq(m);
+        Square t = to_sq(m);
+
+        table[c][f][t] -= table[c][f][t] * abs(int(v)) / 324;
+        table[c][f][t] += int(v) * 32;
+    }
+
+private:
+    Value table[COLOR_NB][SQUARE_NB][SQUARE_NB];
+};
 
 /// MovePicker class is used to pick one pseudo legal move at a time from the
 /// current position. The most important method is next_move(), which returns a

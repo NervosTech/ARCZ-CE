@@ -2,7 +2,7 @@
   Copyright (c) 2013 Ronald de Man
   This file may be redistributed and/or modified without restrictions.
 
-  tbprobe.cpp contains the Nayeem-specific routines of the
+  tbprobe.cpp contains the Stockfish-specific routines of the
   tablebase probing code. It should be relatively easy to adapt
   this code to other chess engines.
 */
@@ -724,7 +724,7 @@ bool Tablebases::root_probe(Position& pos, Search::RootMoves& rootMoves, Value& 
   }
 
   // Obtain 50-move counter for the root position.
-  // In Nayeem there seems to be no clean way, so we do it like this:
+  // In Stockfish there seems to be no clean way, so we do it like this:
   int cnt50 = st.previous->rule50;
 
   // Use 50-move counter to determine whether the root position is

@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <cstring>   // For std::memset
@@ -17,8 +19,62 @@
 
 #include "bitboard.h"
 #include "tt.h"
+#include "uci.h"
+#include "windows.h"
 
 TranspositionTable TT; // Our global transposition table
+int use_large_pages = -1;
+int got_privileges = -1;
+
+
+bool Get_LockMemory_Privileges()
+{
+    HANDLE TH, PROC7;
+    TOKEN_PRIVILEGES tp;
+    bool ret = false;
+
+    PROC7 = GetCurrentProcess();
+    if (OpenProcessToken(PROC7, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TH))
+    {
+        if (LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid))
+        {
+            tp.PrivilegeCount = 1;
+            tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+            if (AdjustTokenPrivileges(TH, FALSE, &tp, 0, NULL, 0))
+            {
+                if (GetLastError() != ERROR_NOT_ALL_ASSIGNED)
+                    ret = true;
+            }
+        }
+        CloseHandle(TH);
+    }
+    return ret;
+}
+
+
+void Try_Get_LockMemory_Privileges()
+{
+    use_large_pages = 0;
+
+    if (Options["Large Pages"] == false)    
+        return;
+
+    if (got_privileges == -1)
+    {
+        if (Get_LockMemory_Privileges() == true)
+            got_privileges = 1;
+        else
+        {
+            sync_cout << "No Privilege for Large Pages" << sync_endl;
+            got_privileges = 0;
+        }
+    }
+
+    if (got_privileges == 0)      
+        return;
+
+    use_large_pages = 1;        
+}
 
 
 /// TranspositionTable::resize() sets the size of the transposition table,
@@ -27,15 +83,70 @@ TranspositionTable TT; // Our global transposition table
 
 void TranspositionTable::resize(size_t mbSize) {
 
+  if (mbSize == 0)
+      mbSize = mbSize_last_used;
+
+  if (mbSize == 0)
+      return;
+
+  mbSize_last_used = mbSize;
+
+  Try_Get_LockMemory_Privileges();
+
   size_t newClusterCount = size_t(1) << msb((mbSize * 1024 * 1024) / sizeof(Cluster));
 
   if (newClusterCount == clusterCount)
-      return;
+  {
+      if ((use_large_pages == 1) && (large_pages_used))      
+          return;
+      if ((use_large_pages == 0) && (large_pages_used == false))
+          return;
+  }
 
   clusterCount = newClusterCount;
+ 
+  if (use_large_pages < 1)
+  {
+      if (mem != NULL)
+      {
+          if (large_pages_used)
+              VirtualFree(mem, 0, MEM_RELEASE);
+          else          
+              free(mem);
+      }
+      uint64_t memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
+      mem = calloc(memsize, 1);
+      large_pages_used = false;
+  }
+  else
+  {
+      if (mem != NULL)
+      {
+          if (large_pages_used)
+              VirtualFree(mem, 0, MEM_RELEASE);
+          else
+              free(mem);
+      }
 
-  free(mem);
-  mem = calloc(clusterCount * sizeof(Cluster) + CacheLineSize - 1, 1);
+      int64_t memsize = clusterCount * sizeof(Cluster);
+      mem = VirtualAlloc(NULL, memsize, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+      if (mem == NULL)
+      {
+          std::cerr << "Failed to allocate " << mbSize
+              << "MB Large Page Memory for transposition table, switching to default" << std::endl;
+
+          use_large_pages = 0;
+          memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
+          mem = calloc(memsize, 1);
+          large_pages_used = false;
+      }
+      else
+      {
+          sync_cout << "info string Hash LargePages " << (memsize >> 20) << " Mb" << sync_endl;
+          large_pages_used = true;
+      }
+        
+  }
 
   if (!mem)
   {

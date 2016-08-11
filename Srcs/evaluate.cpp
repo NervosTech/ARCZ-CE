@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <algorithm>
@@ -70,11 +72,11 @@ namespace {
     // attackedBy[color][piece type] is a bitboard representing all squares
     // attacked by a given color and piece type (can be also ALL_PIECES).
     Bitboard attackedBy[COLOR_NB][PIECE_TYPE_NB];
-	
-	// attackedBy2[color] are the squares attacked by 2 pieces of a given color,
-	// possibly via x-ray or by one pawn and one piece. Diagonal x-ray through
-	// pawn or squares attacked by 2 pawns are not explicitly added.
-	Bitboard attackedBy2[COLOR_NB];
+
+    // attackedBy2[color] are the squares attacked by 2 pieces of a given color,
+    // possibly via x-ray or by one pawn and one piece. Diagonal x-ray through
+    // pawn or squares attacked by 2 pawns are not explicitly added.
+    Bitboard attackedBy2[COLOR_NB];
 
     // kingRing[color] is the zone around the king which is considered
     // by the king safety evaluation. This consists of the squares directly
@@ -183,10 +185,10 @@ namespace {
   const Score RookOnPawn          = S( 8, 24);
   const Score TrappedRook         = S(92,  0);
   const Score SafeCheck           = S(20, 20);
-  const Score OtherCheck          = S(10,  0);
+  const Score OtherCheck          = S(10, 10);
   const Score ThreatByHangingPawn = S(71, 61);
   const Score LooseEnemies        = S( 0, 25);
-  const Score PinOnQueen          = S(40,  0);
+  const Score WeakQueen           = S(35,  0);
   const Score Hanging             = S(48, 27);
   const Score ThreatByPawnPush    = S(38, 22);
   const Score Unstoppable         = S( 0, 20);
@@ -209,7 +211,7 @@ namespace {
   const int KingAttackWeights[PIECE_TYPE_NB] = { 0, 0, 7, 5, 4, 1 };
 
   // Penalties for enemy's safe checks
-  const int QueenContactCheck = 81;
+  const int QueenContactCheck = 89;
   const int QueenCheck        = 62;
   const int RookCheck         = 57;
   const int BishopCheck       = 48;
@@ -229,8 +231,7 @@ namespace {
     Bitboard b = ei.attackedBy[Them][KING];
     ei.attackedBy[Them][ALL_PIECES] |= b;
     ei.attackedBy[Us][ALL_PIECES] |= ei.attackedBy[Us][PAWN] = ei.pi->pawn_attacks(Us);
-	ei.attackedBy2[Us] = ei.attackedBy[Us][PAWN] & ei.attackedBy[Us][KING];
-	
+    ei.attackedBy2[Us] = ei.attackedBy[Us][PAWN] & ei.attackedBy[Us][KING];
 
     // Init king safety tables only if we are going to use them
     if (pos.non_pawn_material(Us) >= QueenValueMg)
@@ -273,6 +274,7 @@ namespace {
         if (ei.pinnedPieces[Us] & s)
             b &= LineBB[pos.square<KING>(Us)][s];
 
+        ei.attackedBy2[Us] |= ei.attackedBy[Us][ALL_PIECES] & b;
         ei.attackedBy[Us][ALL_PIECES] |= ei.attackedBy[Us][Pt] |= b;
 
         if (b & ei.kingRing[Them])
@@ -349,6 +351,13 @@ namespace {
                     score -= (TrappedRook - make_score(mob * 22, 0)) * (1 + !pos.can_castle(Us));
             }
         }
+
+        if (Pt == QUEEN)
+        {
+            // Penalty if any relative pin or discovered attack against the queen
+            if (pos.slider_blockers(pos.pieces(), pos.pieces(Them, ROOK, BISHOP), s))
+                score -= WeakQueen;
+        }
     }
 
     if (DoTrace)
@@ -384,8 +393,8 @@ namespace {
     {
         // Find the attacked squares which are defended only by the king...
         undefended =   ei.attackedBy[Them][ALL_PIECES]
-		            &  ei.attackedBy[Us][KING]
-					& ~ei.attackedBy2[Us];
+                    &  ei.attackedBy[Us][KING]
+                    & ~ei.attackedBy2[Us];
 
         // ... and those which are not defended at all in the larger king ring
         b =  ei.attackedBy[Them][ALL_PIECES] & ~ei.attackedBy[Us][ALL_PIECES]
@@ -408,7 +417,7 @@ namespace {
         b = undefended & ei.attackedBy[Them][QUEEN] & ~pos.pieces(Them);
 
         // ...and keep squares supported by another enemy piece
-		attackUnits += QueenContactCheck * popcount(b & ei.attackedBy2[Them]);
+        attackUnits += QueenContactCheck * popcount(b & ei.attackedBy2[Them]);
 
         // Analyse the safe enemy's checks which are possible on next move...
         safe  = ~(ei.attackedBy[Us][ALL_PIECES] | pos.pieces(Them));
@@ -424,12 +433,12 @@ namespace {
         // Enemy queen safe checks
         if ((b1 | b2) & ei.attackedBy[Them][QUEEN] & safe)
             attackUnits += QueenCheck, score -= SafeCheck;
-		
-		// For other pieces, also consider the square safe if attacked twice,
-		// and only defended by a queen.
-		safe |=  ei.attackedBy2[Them]
-		       & ~(ei.attackedBy2[Us] | pos.pieces(Them))
-			   & ei.attackedBy[Us][QUEEN];
+
+        // For other pieces, also consider the square safe if attacked twice,
+        // and only defended by a queen.
+        safe |=  ei.attackedBy2[Them]
+               & ~(ei.attackedBy2[Us] | pos.pieces(Them))
+               & ei.attackedBy[Us][QUEEN];
 
         // Enemy rooks safe and other checks
         if (b1 & ei.attackedBy[Them][ROOK] & safe)
@@ -490,7 +499,7 @@ namespace {
     const Square Right      = (Us == WHITE ? DELTA_NE : DELTA_SW);
     const Bitboard TRank2BB = (Us == WHITE ? Rank2BB  : Rank7BB);
     const Bitboard TRank7BB = (Us == WHITE ? Rank7BB  : Rank2BB);
-	
+
     enum { Minor, Rook };
 
     Bitboard b, weak, defended, safeThreats;
@@ -500,10 +509,6 @@ namespace {
     if (   (pos.pieces(Them) ^ pos.pieces(Them, QUEEN, KING))
         & ~(ei.attackedBy[Us][ALL_PIECES] | ei.attackedBy[Them][ALL_PIECES]))
         score += LooseEnemies;
-		
-	// Bonus for pins on the opponent queen
-	if (pos.queen_pins(Them))
-		score += PinOnQueen;
 
     // Non-pawn enemies attacked by a pawn
     weak = (pos.pieces(Them) ^ pos.pieces(Them, PAWN)) & ei.attackedBy[Us][PAWN];
@@ -561,19 +566,19 @@ namespace {
        & ~ei.attackedBy[Us][PAWN];
 
     score += ThreatByPawnPush * popcount(b);
-	
-	// King tropism: firstly, find squares that we attack in the enemy king flank
-	b = ei.attackedBy[Us][ALL_PIECES] & KingFlank[Us][file_of(pos.square<KING>(Them))];
-	
-	// Secondly, add to the bitboard the squares which we attack twice in that flank
-	// but which are not protected by a enemy pawn. Note the trick to shift away the
-	// previous attack bits to the empty part of the bitboard.
-	b =  (b & ei.attackedBy2[Us] & ~ei.attackedBy[Them][PAWN])
-	   | (Us == WHITE ? b >> 4 : b << 4);
-	   
-	// Count all these squares with a single popcount
-	score += make_score(7 * popcount(b), 0);
-	 
+
+    // King tropism: firstly, find squares that we attack in the enemy king flank
+    b = ei.attackedBy[Us][ALL_PIECES] & KingFlank[Us][file_of(pos.square<KING>(Them))];
+
+    // Secondly, add to the bitboard the squares which we attack twice in that flank
+    // but which are not protected by a enemy pawn. Note the trick to shift away the
+    // previous attack bits to the empty part of the bitboard.
+    b =  (b & ei.attackedBy2[Us] & ~ei.attackedBy[Them][PAWN])
+       | (Us == WHITE ? b >> 4 : b << 4);
+
+    // Count all these squares with a single popcount
+    score += make_score(7 * popcount(b), 0);
+
     if (DoTrace)
         Trace::add(THREAT, Us, score);
 
@@ -598,7 +603,7 @@ namespace {
         Square s = pop_lsb(&b);
 
         assert(pos.pawn_passed(Us, s));
-		assert(!(pos.pieces(PAWN) & forward_bb(Us, s)));
+        assert(!(pos.pieces(PAWN) & forward_bb(Us, s)));
 
         int r = relative_rank(Us, s) - RANK_2;
         int rr = r * (r - 1);
@@ -694,10 +699,9 @@ namespace {
 
     // ...count safe + (behind & safe) with a single popcount
     int bonus = popcount((Us == WHITE ? safe << 32 : safe >> 32) | (behind & safe));
-    int weight =  pos.count<KNIGHT>(Us) + pos.count<BISHOP>(Us)
-                + pos.count<KNIGHT>(Them) + pos.count<BISHOP>(Them);
+    int weight = pos.count<ALL_PIECES>(Us);
 
-    return make_score(bonus * weight * weight * 2 / 11, 0);
+    return make_score(bonus * weight * weight  / 22, 0);
   }
 
 

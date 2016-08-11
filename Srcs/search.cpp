@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <algorithm>
@@ -19,6 +21,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "tzbook.h"
 #include "evaluate.h"
 #include "misc.h"
 #include "movegen.h"
@@ -28,14 +31,7 @@
 #include "thread.h"
 #include "tt.h"
 #include "uci.h"
-
-#ifdef SYZYGY_TB
 #include "syzygy/tbprobe.h"
-#endif
-
-#ifdef LOMONOSOV_TB
-#include "lomonosov_probe.h"
-#endif
 
 namespace Search {
 
@@ -45,21 +41,12 @@ namespace Search {
 
 namespace Tablebases {
 
-  uint64_t Hits;
-#ifdef SYZYGY_TB
   int Cardinality;
+  uint64_t Hits;
   bool RootInTB;
   bool UseRule50;
   Depth ProbeDepth;
   Value Score;
-#endif
-#ifdef LOMONOSOV_TB
-  bool lomonosov_tb_use_opt = true;
-  bool use_tables = false;
-  int max_tb_pieces = 0;
-  Depth lomonosov_probe_depth_min = ONE_PLY;
-  Depth lomonosov_probe_depth_max = DEPTH_MAX;
-#endif
 }
 
 namespace TB = Tablebases;
@@ -75,7 +62,7 @@ namespace {
 
   // Razoring and futility margin based on depth
   const int razor_margin[4] = { 483, 570, 603, 554 };
-  Value futility_margin(Depth d, bool cutNode = false) { return Value((200 - 70 * cutNode) * d); }
+  Value futility_margin(Depth d) { return Value(150 * d); }
 
   // Futility and reductions lookup tables, initialized at startup
   int FutilityMoveCounts[2][16];  // [improving][depth]
@@ -223,6 +210,7 @@ void Search::clear() {
   {
       th->history.clear();
       th->counterMoves.clear();
+      th->fromTo.clear();
   }
 
   Threads.main()->previousScore = VALUE_INFINITE;
@@ -271,24 +259,6 @@ void MainThread::search() {
   DrawValue[ us] = VALUE_DRAW - Value(contempt);
   DrawValue[~us] = VALUE_DRAW + Value(contempt);
 
-  TB::Hits = 0;
-#ifdef SYZYGY_TB
-  TB::RootInTB = false;
-  TB::UseRule50 = Options["Syzygy50MoveRule"];
-  TB::ProbeDepth = Options["SyzygyProbeDepth"] * ONE_PLY;
-  TB::Cardinality = Options["SyzygyProbeLimit"];
-
-  // Skip TB probing when no TB found: !TBLargest -> !TB::Cardinality
-  if (TB::Cardinality > TB::MaxCardinality)
-  {
-      TB::Cardinality = TB::MaxCardinality;
-      TB::ProbeDepth = DEPTH_ZERO;
-  }
-#endif
-#ifdef LOMONOSOV_TB
-  lomonosov_set_threads_count(Threads.size());
-#endif
-
   if (rootMoves.empty())
   {
       rootMoves.push_back(RootMove(MOVE_NONE));
@@ -298,89 +268,29 @@ void MainThread::search() {
   }
   else
   {
-#ifdef SYZYGY_TB
-      if (    TB::Cardinality >=  rootPos.count<ALL_PIECES>(WHITE)
-                                + rootPos.count<ALL_PIECES>(BLACK)
-          && !rootPos.can_castle(ANY_CASTLING))
+      Move bookMove = MOVE_NONE;
+
+      if (!Limits.infinite && !Limits.mate)
+          bookMove = tzbook.probe2(rootPos);
+
+      if (bookMove && std::count(rootMoves.begin(), rootMoves.end(), bookMove))
       {
-          // If the current root position is in the tablebases, then RootMoves
-          // contains only moves that preserve the draw or the win.
-          TB::RootInTB = Tablebases::root_probe(rootPos, rootMoves, TB::Score);
-
-          if (TB::RootInTB)
-              TB::Cardinality = 0; // Do not probe tablebases during the search
-
-          else // If DTZ tables are missing, use WDL tables as a fallback
-          {
-              // Filter out moves that do not preserve the draw or the win.
-              TB::RootInTB = Tablebases::root_probe_wdl(rootPos, rootMoves, TB::Score);
-
-              // Only probe during search if winning
-              if (TB::Score <= VALUE_DRAW)
-                  TB::Cardinality = 0;
-          }
-
-          if (TB::RootInTB)
-          {
-              TB::Hits = rootMoves.size();
-
-              if (!TB::UseRule50)
-                  TB::Score =  TB::Score > VALUE_DRAW ?  VALUE_MATE - MAX_PLY - 1
-                             : TB::Score < VALUE_DRAW ? -VALUE_MATE + MAX_PLY + 1
-                                                      :  VALUE_DRAW;
-          }
+          std::swap(rootMoves[0], *std::find(rootMoves.begin(), rootMoves.end(), bookMove));
       }
-#endif
-#ifdef LOMONOSOV_TB
-	if (lomonosov_loaded && TB::lomonosov_tb_use_opt)
-		TB::use_tables = true;
-	else
-		TB::use_tables = false;
-	TB::lomonosov_probe_depth_min = Options["Lomonosov Depth Min"] * ONE_PLY;
-	TB::lomonosov_probe_depth_max = Options["Lomonosov Depth Max"] * ONE_PLY;
-	bool root_is_win_dtm = false;
-	if (TB::use_tables && (TB::max_tb_pieces >= rootPos.count<ALL_PIECES>(WHITE)
-	                                  + rootPos.count<ALL_PIECES>(BLACK))
-									  && !rootPos.can_castle(ANY_CASTLING)) {
-		TB::Hits = rootMoves.size() + 1;
-		if (lomonosov_root_probe(rootPos, rootMoves, &root_is_win_dtm)) {
-			if (!root_is_win_dtm) {
-				// The current root position is in the tablebases.
-				// RootMoves now contains only moves that preserve the draw or win.
-				// Do not probe tablebases during the search.
-				TB::use_tables = false;
-			}
-		}
-	}
-	if (!root_is_win_dtm) {
-#endif
+      else
+      {
+          for (Thread* th : Threads)
+              if (th != this)
+                  th->start_searching();
 
-      for (Thread* th : Threads)
-          if (th != this)
-              th->start_searching();
-
-      Thread::search(); // Let's start searching!
-#ifdef LOMONOSOV_TB
-	} else {
-		sync_cout << "info depth 0 score "
-				<< UCI::mate_value(rootMoves[0].score)
-				<< " pv";
-        for (size_t j = 0; j < rootMoves[0].pv.size(); ++j)
-            std::cout << " " << UCI::move(rootMoves[0].pv[j], rootPos.is_chess960());
-        std::cout << sync_endl;
-	}
-#endif
+          Thread::search(); // Let's start searching!
+      }
   }
 
   // When playing in 'nodes as time' mode, subtract the searched nodes from
   // the available ones before exiting.
   if (Limits.npmsec)
       Time.availableNodes += Limits.inc[us] - Threads.nodes_searched();
-
-  // When search is stopped this info is not printed
-  sync_cout << "info nodes " << rootPos.nodes_searched()
-            << " tbhits " << TB::Hits
-			<< " time " << Time.elapsed() << sync_endl;
 
   // When we reach the maximum depth, we can arrive here without a raise of
   // Signals.stop. However, if we are pondering or in an infinite search,
@@ -643,26 +553,13 @@ namespace {
   template <NodeType NT>
   Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode) {
 
-#if defined(SYZYGY_TB) && defined(LOMONOSOV_TB)
-	Value syzygy_value = (Value)0;
-	Value lomonosov_value = (Value)0;
-#endif
-#ifdef SYZYGY_TB
-	bool syzygy_success = false;
-	bool syzygy_probe = false;
-#endif
-#ifdef LOMONOSOV_TB
-	bool lomonosov_success = false;
-	bool lomonosov_probe = false;
-#endif
-
     const bool PvNode = NT == PV;
     const bool rootNode = PvNode && (ss-1)->ply == 0;
 
     assert(-VALUE_INFINITE <= alpha && alpha < beta && beta <= VALUE_INFINITE);
     assert(PvNode || (alpha == beta - 1));
     assert(DEPTH_ZERO < depth && depth < DEPTH_MAX);
-	assert(!(PvNode && cutNode));
+    assert(!(PvNode && cutNode));
 
     Move pv[MAX_PLY+1], quietsSearched[64];
     StateInfo st;
@@ -670,10 +567,10 @@ namespace {
     Key posKey;
     Move ttMove, move, excludedMove, bestMove;
     Depth extension, newDepth, predictedDepth;
-	Value bestValue, value, ttValue, eval, nullValue;
+    Value bestValue, value, ttValue, eval, nullValue;
     bool ttHit, inCheck, givesCheck, singularExtensionNode, improving;
     bool captureOrPromotion, doFullDepthSearch, moveCountPruning;
-	Piece moved_piece;
+    Piece moved_piece;
     int moveCount, quietCount;
 
     // Step 1. Initialize node
@@ -755,8 +652,6 @@ namespace {
     }
 
     // Step 4a. Tablebase probe
-#ifdef SYZYGY_TB
-	syzygy_probe = false;
     if (!rootNode && TB::Cardinality)
     {
         int piecesCnt = pos.count<ALL_PIECES>(WHITE) + pos.count<ALL_PIECES>(BLACK);
@@ -766,11 +661,11 @@ namespace {
             &&  pos.rule50_count() == 0
             && !pos.can_castle(ANY_CASTLING))
         {
-			syzygy_probe = true;
             int found, v = Tablebases::probe_wdl(pos, &found);
 
             if (found)
             {
+                TB::Hits++;
 
                 int drawScore = TB::UseRule50 ? 1 : 0;
 
@@ -778,81 +673,14 @@ namespace {
                        : v >  drawScore ?  VALUE_MATE - MAX_PLY - ss->ply
                                         :  VALUE_DRAW + 2 * v * drawScore;
 
-#ifdef LOMONOSOV_TB
-			    syzygy_value = value;
-#else
-				TB::Hits++;
                 tte->save(posKey, value_to_tt(value, ss->ply), BOUND_EXACT,
                           std::min(DEPTH_MAX - ONE_PLY, depth + 6 * ONE_PLY),
                           MOVE_NONE, VALUE_NONE, TT.generation());
 
                 return value;
-#endif
             }
         }
     }
-#endif
-
-#ifdef LOMONOSOV_TB
-	lomonosov_probe = (TB::use_tables && !rootNode
-        && depth >= TB::lomonosov_probe_depth_min
-		&& depth <= TB::lomonosov_probe_depth_max
-		//&& pos.rule50_count() == 0
-		&& (pos.count<ALL_PIECES>(WHITE) + pos.count<ALL_PIECES>(BLACK)) <= TB::max_tb_pieces);
-	if (lomonosov_probe) {
-		int v;
-		if ((lomonosov_success = lomonosov_tbprobe(pos, ss->ply, &v, true, thisThread->idx))) {
-			value = (Value)v;
-#ifdef SYZYGY_TB
-			lomonosov_value = value;
-#else
-			TB::Hits++;
-			
-			tte->save(posKey, value_to_tt(value, ss->ply), BOUND_EXACT,
-                          std::min(DEPTH_MAX - ONE_PLY, depth + 6 * ONE_PLY),
-                          MOVE_NONE, VALUE_NONE, TT.generation());
-
-			return value;
-#endif
-		}
-    }
-#endif
-
-#if defined(LOMONOSOV_TB) && defined(SYZYGY_TB)
-	if (syzygy_probe != lomonosov_probe) {
-		printf("!!!!! syzygy_probe = %d, lomonosov_probe = %d\n", syzygy_probe, lomonosov_probe);
-		printf("use_tables = %d, pos.total_piece_count() = %d, max_tb_pieces = %d, TBCardinality = %d, TBProbeDepth = %d\n",
-			TB::use_tables, pos.total_piece_count(), TB::max_tb_pieces, TB::Cardinality, TB::ProbeDepth);
-		exit(0);
-	} else if (syzygy_probe) {
-		if (syzygy_success != lomonosov_success) {
-			printf("!!!!! syzygy_success = %d, lomonosov_success = %d\n", syzygy_success, lomonosov_success);
-			printf("fen = %s\n", pos.fen().c_str());
-			exit(1);
-		}
-		else if (syzygy_success) {
-			if (syzygy_value != lomonosov_value) {
-				Signals.stop = true;
-				printf("!!!!! syzygy_value = %d, lomonosov_value = %d\n", syzygy_value, lomonosov_value);
-				printf("fen = %s\n", pos.fen().c_str());
-				Position pos_tmp = pos;
-				int success;
-				int vs = Tablebases::probe_wdl(pos_tmp, &success), vl;
-				success = lomonosov_tbprobe(pos, 0, &vl, false);
-				printf("second: syzygy = %d, lomonosov = %d\n", vs, vl);
-				exit(2);
-			} else {
-				TB::Hits++;
-				
-				tte->save(posKey, value_to_tt(value, ss->ply), BOUND_EXACT,
-                          std::min(DEPTH_MAX - ONE_PLY, depth + 6 * ONE_PLY),
-                          MOVE_NONE, VALUE_NONE, TT.generation());
-
-				return value;
-			}
-		}
-	}
-#endif
 
     // Step 5. Evaluate the position statically
     if (inCheck)
@@ -904,15 +732,15 @@ namespace {
     // Step 7. Futility pruning: child node (skipped when in check)
     if (   !rootNode
         &&  depth < 7 * ONE_PLY
-        &&  eval - futility_margin(depth, cutNode) >= beta
+        &&  eval - futility_margin(depth) >= beta
         &&  eval < VALUE_KNOWN_WIN  // Do not return unproven wins
         &&  pos.non_pawn_material(pos.side_to_move()))
-        return eval - futility_margin(depth, cutNode);
+        return eval - futility_margin(depth);
 
     // Step 8. Null move search with verification search (is omitted in PV nodes)
     if (   !PvNode
         &&  eval >= beta
-		&& (ss->staticEval >= beta - 35 * (depth / ONE_PLY - 6) || depth >= 13 * ONE_PLY)
+        && (ss->staticEval >= beta - 35 * (depth / ONE_PLY - 6) || depth >= 13 * ONE_PLY)
         &&  pos.non_pawn_material(pos.side_to_move()))
     {
         ss->currentMove = MOVE_NULL;
@@ -998,8 +826,8 @@ namespace {
 moves_loop: // When in check search starts from here
 
     const CounterMoveStats* cmh  = (ss-1)->counterMoves;
-	const CounterMoveStats* fmh  = (ss-2)->counterMoves;
-	const CounterMoveStats* fmh2 = (ss-4)->counterMoves;
+    const CounterMoveStats* fmh  = (ss-2)->counterMoves;
+    const CounterMoveStats* fmh2 = (ss-4)->counterMoves;
 
     MovePicker mp(pos, ttMove, depth, ss);
     CheckInfo ci(pos);
@@ -1045,19 +873,19 @@ moves_loop: // When in check search starts from here
 
       extension = DEPTH_ZERO;
       captureOrPromotion = pos.capture_or_promotion(move);
-	  moved_piece = pos.moved_piece(move);
+      moved_piece = pos.moved_piece(move);
 
       givesCheck =  type_of(move) == NORMAL && !ci.dcCandidates
                   ? ci.checkSquares[type_of(pos.piece_on(from_sq(move)))] & to_sq(move)
                   : pos.gives_check(move, ci);
-				  
-	  moveCountPruning =   depth < 16 * ONE_PLY
-	                    && moveCount >= FutilityMoveCounts[improving][depth];
+
+      moveCountPruning =   depth < 16 * ONE_PLY
+                        && moveCount >= FutilityMoveCounts[improving][depth];
 
       // Step 12. Extend checks
       if (    givesCheck
-	      && !moveCountPruning
-		  &&  pos.see_sign(move) >= VALUE_ZERO)
+          && !moveCountPruning
+          &&  pos.see_sign(move) >= VALUE_ZERO)
           extension = ONE_PLY;
 
       // Singular extension search. If all moves but one fail low on a search of
@@ -1100,27 +928,27 @@ moves_loop: // When in check search starts from here
           if (   depth <= 4 * ONE_PLY
               && move != ss->killers[0]
               && (!cmh  || (*cmh )[moved_piece][to_sq(move)] < VALUE_ZERO)
-			  && (!fmh  || (*fmh )[moved_piece][to_sq(move)] < VALUE_ZERO)
-			  && (!fmh2 || (*fmh2)[moved_piece][to_sq(move)] < VALUE_ZERO || (cmh && fmh)))
+              && (!fmh  || (*fmh )[moved_piece][to_sq(move)] < VALUE_ZERO)
+              && (!fmh2 || (*fmh2)[moved_piece][to_sq(move)] < VALUE_ZERO || (cmh && fmh)))
               continue;
 
           predictedDepth = std::max(newDepth - reduction<PvNode>(improving, depth, moveCount), DEPTH_ZERO);
 
           // Futility pruning: parent node
           if (   predictedDepth < 7 * ONE_PLY
-		      && ss->staticEval + futility_margin(predictedDepth) + 256 <= alpha)
-			  continue;
+              && ss->staticEval + 256 + 200 * predictedDepth / ONE_PLY <= alpha)
+              continue;
 
           // Prune moves with negative SEE at low depths and below a decreasing
-		  // threshold at higher depths.
-		  if (predictedDepth < 8 * ONE_PLY)
-		  {
-			  Value see_v = predictedDepth < 4 * ONE_PLY ? VALUE_ZERO
-			                : -PawnValueMg * 2 * int(predictedDepth - 3 * ONE_PLY);
-							
-			  if (pos.see_sign(move) < see_v)
-				  continue;
-		  }
+          // threshold at higher depths.
+          if (predictedDepth < 8 * ONE_PLY)
+          {
+              Value see_v = predictedDepth < 4 * ONE_PLY ? VALUE_ZERO
+                            : -PawnValueMg * 2 * int(predictedDepth - 3 * ONE_PLY);
+
+              if (pos.see_sign(move) < see_v)
+                  continue;
+          }
       }
 
       // Speculative prefetch as early as possible
@@ -1149,27 +977,25 @@ moves_loop: // When in check search starts from here
           Value val = thisThread->history[moved_piece][to_sq(move)]
                      +    (cmh  ? (*cmh )[moved_piece][to_sq(move)] : VALUE_ZERO)
                      +    (fmh  ? (*fmh )[moved_piece][to_sq(move)] : VALUE_ZERO)
-                     +    (fmh2 ? (*fmh2)[moved_piece][to_sq(move)] : VALUE_ZERO);
+                     +    (fmh2 ? (*fmh2)[moved_piece][to_sq(move)] : VALUE_ZERO)
+                     +    thisThread->fromTo.get(~pos.side_to_move(), move);
 
           // Increase reduction for cut nodes
           if (cutNode)
               r += 2 * ONE_PLY;
-
-          if (PvNode && extension)
-			  r = std::max(DEPTH_ZERO, r - ONE_PLY);
 
           // Decrease reduction for moves that escape a capture. Filter out
           // castling moves, because they are coded as "king captures rook" and
           // hence break make_move(). Also use see() instead of see_sign(),
           // because the destination square is empty.
           else if (   type_of(move) == NORMAL
-		           && type_of(pos.piece_on(to_sq(move))) != PAWN
-				   && pos.see(make_move(to_sq(move), from_sq(move))) < VALUE_ZERO)
-		      r -= 2 * ONE_PLY;
-			  
-		  // Decrease/increase reduction for moves with a good/bad history
-		  int rHist = (val - 10000) / 20000;
-		  r = std::max(DEPTH_ZERO, r - rHist * ONE_PLY);
+                   && type_of(pos.piece_on(to_sq(move))) != PAWN
+                   && pos.see(make_move(to_sq(move), from_sq(move))) < VALUE_ZERO)
+              r -= 2 * ONE_PLY;
+
+          // Decrease/increase reduction for moves with a good/bad history
+          int rHist = (val - 10000) / 20000;
+          r = std::max(DEPTH_ZERO, r - rHist * ONE_PLY);
 
           Depth d = std::max(newDepth - r, ONE_PLY);
 
@@ -1300,7 +1126,7 @@ moves_loop: // When in check search starts from here
              && !pos.captured_piece_type()
              && is_ok((ss-1)->currentMove))
     {
-		Square prevSq = to_sq((ss-1)->currentMove);
+        Square prevSq = to_sq((ss-1)->currentMove);
         Value bonus = Value((depth / ONE_PLY) * (depth / ONE_PLY) + 2 * depth / ONE_PLY - 2);
         if ((ss-2)->counterMoves)
             (ss-2)->counterMoves->update(pos.piece_on(prevSq), prevSq, bonus);
@@ -1581,6 +1407,7 @@ moves_loop: // When in check search starts from here
         ss->killers[0] = move;
     }
 
+    Color c = pos.side_to_move();
     Value bonus = Value((depth / ONE_PLY) * (depth / ONE_PLY) + 2 * depth / ONE_PLY - 2);
 
     Square prevSq = to_sq((ss-1)->currentMove);
@@ -1590,6 +1417,7 @@ moves_loop: // When in check search starts from here
     Thread* thisThread = pos.this_thread();
 
     thisThread->history.update(pos.moved_piece(move), to_sq(move), bonus);
+    thisThread->fromTo.update(c, move, bonus);
 
     if (cmh)
     {
@@ -1607,6 +1435,7 @@ moves_loop: // When in check search starts from here
     for (int i = 0; i < quietsCnt; ++i)
     {
         thisThread->history.update(pos.moved_piece(quiets[i]), to_sq(quiets[i]), -bonus);
+        thisThread->fromTo.update(c, quiets[i], -bonus);
 
         if (cmh)
             cmh->update(pos.moved_piece(quiets[i]), to_sq(quiets[i]), -bonus);
@@ -1718,12 +1547,8 @@ string UCI::pv(const Position& pos, Depth depth, Value alpha, Value beta) {
       Depth d = updated ? depth : depth - ONE_PLY;
       Value v = updated ? rootMoves[i].score : rootMoves[i].previousScore;
 
-#ifdef SYZYGY_TB
       bool tb = TB::RootInTB && abs(v) < VALUE_MATE - MAX_PLY;
       v = tb ? TB::Score : v;
-#else
-	  bool tb = false;
-#endif
 
       if (ss.rdbuf()->in_avail()) // Not at first line
           ss << "\n";
@@ -1768,7 +1593,7 @@ bool RootMove::extract_ponder_from_tt(Position& pos)
     assert(pv.size() == 1);
 
     pos.do_move(pv[0], st, pos.gives_check(pv[0], CheckInfo(pos)));
-    TTEntry* tte = TT.probe(pos.key(), ttHit);pos.undo_move(pv[0]);
+    TTEntry* tte = TT.probe(pos.key(), ttHit);
 
     if (ttHit)
     {
@@ -1778,5 +1603,51 @@ bool RootMove::extract_ponder_from_tt(Position& pos)
     }
 
     pos.undo_move(pv[0]);
-	return pv.size() > 1;
+    return pv.size() > 1;
+}
+
+void Tablebases::filter_root_moves(Position& pos, Search::RootMoves& rootMoves) {
+
+    Hits = 0;
+    RootInTB = false;
+    UseRule50 = Options["Syzygy50MoveRule"];
+    ProbeDepth = Options["SyzygyProbeDepth"] * ONE_PLY;
+    Cardinality = Options["SyzygyProbeLimit"];
+
+    // Skip TB probing when no TB found: !TBLargest -> !TB::Cardinality
+    if (Cardinality > MaxCardinality)
+    {
+        Cardinality = MaxCardinality;
+        ProbeDepth = DEPTH_ZERO;
+    }
+
+    if (Cardinality < popcount(pos.pieces()) || pos.can_castle(ANY_CASTLING))
+        return;
+
+    // If the current root position is in the tablebases, then RootMoves
+    // contains only moves that preserve the draw or the win.
+    RootInTB = root_probe(pos, rootMoves, TB::Score);
+
+    if (RootInTB)
+        Cardinality = 0; // Do not probe tablebases during the search
+
+    else // If DTZ tables are missing, use WDL tables as a fallback
+    {
+        // Filter out moves that do not preserve the draw or the win.
+        RootInTB = root_probe_wdl(pos, rootMoves, TB::Score);
+
+        // Only probe during search if winning
+        if (TB::Score <= VALUE_DRAW)
+            Cardinality = 0;
+    }
+
+    if (RootInTB)
+    {
+        Hits = rootMoves.size();
+
+        if (!UseRule50)
+            TB::Score =  TB::Score > VALUE_DRAW ?  VALUE_MATE - MAX_PLY - 1
+                       : TB::Score < VALUE_DRAW ? -VALUE_MATE + MAX_PLY + 1
+                                                :  VALUE_DRAW;
+    }
 }

@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifndef TYPES_H_INCLUDED
@@ -89,11 +91,6 @@ const bool HasPext = false;
 const bool Is64Bit = true;
 #else
 const bool Is64Bit = false;
-#endif
-
-#ifdef LOMONOSOV_TB
-#define KING_INDEX 30 // index of king place in piece array
-#define  C_PIECES  6    /* Maximum # of pieces of one color OTB */
 #endif
 
 typedef uint64_t Key;
@@ -425,5 +422,3 @@ inline bool is_ok(Move m) {
 }
 
 #endif // #ifndef TYPES_H_INCLUDED
-
-#include "tune.h" // Global visibility to tuning setup 

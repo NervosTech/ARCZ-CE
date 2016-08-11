@@ -1,15 +1,17 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <fstream>
@@ -21,7 +23,9 @@
 #include "position.h"
 #include "search.h"
 #include "thread.h"
+#include "tt.h"
 #include "uci.h"
+#include "tzbook.h"
 
 using namespace std;
 
@@ -75,7 +79,7 @@ const vector<string> Defaults = {
 
 } // namespace
 
-/// benchmark() runs a simple benchmark by letting Chess analyze a set
+/// benchmark() runs a simple benchmark by letting Stockfish analyze a set
 /// of positions for a given limit each. There are five parameters: the
 /// transposition table size, the number of search threads that should
 /// be used, the limit value spent for each position (optional, default is
@@ -139,6 +143,7 @@ void benchmark(const Position& current, istream& is) {
   uint64_t nodes = 0;
   TimePoint elapsed = now();
   Position pos;
+  tzbook.enabled = false;
 
   for (size_t i = 0; i < fens.size(); ++i)
   {
@@ -159,6 +164,7 @@ void benchmark(const Position& current, istream& is) {
       }
   }
 
+  tzbook.enabled = true;
   elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
 
   dbg_print(); // Just before exiting

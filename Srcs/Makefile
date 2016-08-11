@@ -1,15 +1,20 @@
-# Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-# Nayeem is free software: you can redistribute it and/or modify
+# Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+# Copyright (C) 2004-2008 Tord Romstad (Glaurung author)
+# Copyright (C) 2008-2015 Marco Costalba, Joona Kiiski, Tord Romstad
+# Copyright (C) 2015-2016 Marco Costalba, Joona Kiiski, Gary Linscott, Tord Romstad
+#
+# Stockfish is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# Nayeem is distributed in the hope that it will be useful,
+#
+# Stockfish is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
+#
 # You should have received a copy of the GNU General Public License
-# along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
-
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 ### ==========================================================================
@@ -20,7 +25,7 @@
 UNAME = $(shell uname)
 
 ### Executable name
-EXE = Nayeem
+EXE = stockfish
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -32,15 +37,7 @@ PGOBENCH = ./$(EXE) bench 16 1 1000 default time
 ### Object files
 OBJS = benchmark.o bitbase.o bitboard.o endgame.o evaluate.o main.o \
 	material.o misc.o movegen.o movepick.o pawns.o position.o psqt.o \
-	search.o thread.o timeman.o tt.o uci.o ucioption.o
-	
-ifeq ($(SYZYGY),yes)
-	OBJS += syzygy/tbprobe.o
-endif
-
-ifeq ($(LOMONOSOV),yes)
-	OBJS += lmtb.o lomonosov_probe.o
-endif
+	search.o thread.o timeman.o tt.o uci.o ucioption.o tzbook.o syzygy/tbprobe.o
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -73,16 +70,6 @@ pext = no
 
 ### 2.2 Architecture specific
 
-ifeq ($(ARCH),x86-64-avx)
-	arch = x86_64
-	bits = 64
-	prefetch = yes
-	bsfq = yes
-	popcnt = yes
-	sse = yes
-	avx = yes
-endif
-	
 ifeq ($(ARCH),general-32)
 	arch = any
 endif
@@ -148,13 +135,6 @@ endif
 ### 3.1 Selecting compiler (default = gcc)
 
 CXXFLAGS += -Wall -Wcast-qual -fno-exceptions -fno-rtti -std=c++11 $(EXTRACXXFLAGS)
-ifeq ($(SYZYGY),yes)
-	CXXFLAGS += -DSYZYGY_TB
-endif
-ifeq ($(LOMONOSOV),yes)
-	CXXFLAGS += -DLOMONOSOV_TB
-endif
-
 DEPENDFLAGS += -std=c++11
 LDFLAGS += $(EXTRALDFLAGS)
 
@@ -370,7 +350,7 @@ endif
 
 help:
 	@echo ""
-	@echo "To compile Nayeem, type: "
+	@echo "To compile stockfish, type: "
 	@echo ""
 	@echo "make target ARCH=arch [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -401,10 +381,6 @@ help:
 	@echo "mingw                   > Gnu compiler with MinGW under Windows"
 	@echo "clang                   > LLVM Clang compiler"
 	@echo "icc                     > Intel compiler"
-	@echo ""
-	@echo "Supported tablebases:"
-	@echo "LOMONOSOV=yes           > Support of Lomonosov Tablebases"
-	@echo "SYZYGY=yes              > Support of Syzygy Tablebases"
 	@echo ""
 	@echo "Simple examples. If you don't know what to do, you likely want to run: "
 	@echo ""

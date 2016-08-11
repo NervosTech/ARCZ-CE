@@ -1,22 +1,23 @@
 /*
-  Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-  Nayeem is free software: you can redistribute it and/or modify
+  Nayeem , a UCI chess playing engine derived from Stockfish
+  Nayeem  is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  Nayeem is distributed in the hope that it will be useful,
+
+  Nayeem  is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
+
   You should have received a copy of the GNU General Public License
-  along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <thread>
 
 #include "misc.h"
 #include "thread.h"
@@ -27,7 +28,7 @@ namespace {
 
 /// Version number. If Version is left empty, then compile date in the format
 /// DD-MM-YY and show in engine_info.
-static const string Version = "Nayeem 8.0";
+static const string Version = "Nayeem 9.0";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -87,9 +88,9 @@ public:
 
 } // namespace
 
-/// engine_info() returns the full name of the current Chess version. This
-/// will be either "Chess <Tag> DD-MM-YY" (where DD-MM-YY is the date when
-/// the program was compiled) or "Chess <Version>", depending on whether
+/// engine_info() returns the full name of the current Stockfish version. This
+/// will be either "Stockfish <Tag> DD-MM-YY" (where DD-MM-YY is the date when
+/// the program was compiled) or "Stockfish <Version>", depending on whether
 /// Version is empty.
 
 const string engine_info(bool to_uci) {
@@ -97,7 +98,7 @@ const string engine_info(bool to_uci) {
   const string months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
   string month, day, year;
   stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
-  
+
   unsigned int n = std::thread::hardware_concurrency();
 
   ss << "" << Version << setfill('0');
@@ -109,15 +110,15 @@ const string engine_info(bool to_uci) {
   }
 
   ss << (Is64Bit ? " 64" : "")
-     << (HasPext ? " xBMI2" : (HasPopCnt ? " xMod" : ""))
+     << (HasPext ? " BMI2" : (HasPopCnt ? " Mod" : ""))
      << (to_uci  ? "\nid author ": " by ")
-     << "Mohamed Nayeem , King Asad , St Peter\n"
-	 << "Support on Lomonosov tablebases\n"
-	 << "www.sicilianchess.com";
+     << "Mohamed Nayeem\n"
+	 << "Based : Stockfish\n"
+     << "Tamilnadu,Ramanathapuram Dist,Kilakarai";
   ss << (to_uci ? "" : "\n\ninfo string ")
 	 << (to_uci ? "" : std::to_string(n))
-	 << (to_uci ? "" : " Cpu(s) detected")
-	 << (to_uci ? "" : "\ninfo string 16 MB Hash");
+	 << (to_uci ? "" : " processor(s) detected")
+	 << (to_uci ? "" : "\ninfo string 64 MB Hash");
   return ss.str();
 }
 
