@@ -79,7 +79,7 @@ const vector<string> Defaults = {
 
 } // namespace
 
-/// benchmark() runs a simple benchmark by letting Stockfish analyze a set
+/// benchmark() runs a simple benchmark by letting Chess analyze a set
 /// of positions for a given limit each. There are five parameters: the
 /// transposition table size, the number of search threads that should
 /// be used, the limit value spent for each position (optional, default is
