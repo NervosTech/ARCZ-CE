@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #include <algorithm>
@@ -119,9 +110,9 @@ namespace {
     // Immediate win if a pawn can be promoted without getting captured
     else if (   us == WHITE
              && rank_of(psq) == RANK_7
-             && ksq[us] != psq + DELTA_N
-             && (    distance(ksq[~us], psq + DELTA_N) > 1
-                 || (StepAttacksBB[KING][ksq[us]] & (psq + DELTA_N))))
+             && ksq[us] != psq + NORTH
+             && (    distance(ksq[~us], psq + NORTH) > 1
+                 || (StepAttacksBB[KING][ksq[us]] & (psq + NORTH))))
         result = WIN;
 
     // Immediate draw if it is a stalemate or a king captures undefended pawn
@@ -162,12 +153,12 @@ namespace {
     if (Us == WHITE)
     {
         if (rank_of(psq) < RANK_7)      // Single push
-            r |= db[index(Them, ksq[Them], ksq[Us], psq + DELTA_N)];
+            r |= db[index(Them, ksq[Them], ksq[Us], psq + NORTH)];
 
         if (   rank_of(psq) == RANK_2   // Double push
-            && psq + DELTA_N != ksq[Us]
-            && psq + DELTA_N != ksq[Them])
-            r |= db[index(Them, ksq[Them], ksq[Us], psq + DELTA_N + DELTA_N)];
+            && psq + NORTH != ksq[Us]
+            && psq + NORTH != ksq[Them])
+            r |= db[index(Them, ksq[Them], ksq[Us], psq + NORTH + NORTH)];
     }
 
     return result = r & Good  ? Good  : r & UNKNOWN ? UNKNOWN : Bad;

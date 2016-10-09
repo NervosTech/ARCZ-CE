@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #include <algorithm>
@@ -19,8 +10,9 @@
 #include "types.h"
 
 Value PieceValue[PHASE_NB][PIECE_NB] = {
-{ VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg },
-{ VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg } };
+  { VALUE_ZERO, PawnValueMg, KnightValueMg, BishopValueMg, RookValueMg, QueenValueMg },
+  { VALUE_ZERO, PawnValueEg, KnightValueEg, BishopValueEg, RookValueEg, QueenValueEg }
+};
 
 namespace PSQT {
 
@@ -95,25 +87,28 @@ const Score Bonus[][RANK_NB][int(FILE_NB) / 2] = {
 
 #undef S
 
-Score psq[COLOR_NB][PIECE_TYPE_NB][SQUARE_NB];
+Score psq[PIECE_NB][SQUARE_NB];
 
 // init() initializes piece-square tables: the white halves of the tables are
 // copied from Bonus[] adding the piece value, then the black halves of the
 // tables are initialized by flipping and changing the sign of the white scores.
 void init() {
+  PieceValue[0][4] = RookValueMg;
+  PieceValue[1][4] = RookValueEg;
+  
 
-  for (PieceType pt = PAWN; pt <= KING; ++pt)
+  for (Piece pc = W_PAWN; pc <= W_KING; ++pc)
   {
-      PieceValue[MG][make_piece(BLACK, pt)] = PieceValue[MG][pt];
-      PieceValue[EG][make_piece(BLACK, pt)] = PieceValue[EG][pt];
+      PieceValue[MG][~pc] = PieceValue[MG][pc];
+      PieceValue[EG][~pc] = PieceValue[EG][pc];
 
-      Score v = make_score(PieceValue[MG][pt], PieceValue[EG][pt]);
+      Score v = make_score(PieceValue[MG][pc], PieceValue[EG][pc]);
 
       for (Square s = SQ_A1; s <= SQ_H8; ++s)
       {
           File f = std::min(file_of(s), FILE_H - file_of(s));
-          psq[WHITE][pt][ s] = v + Bonus[pt][rank_of(s)][f];
-          psq[BLACK][pt][~s] = -psq[WHITE][pt][s];
+          psq[ pc][ s] = v + Bonus[pc][rank_of(s)][f];
+          psq[~pc][~s] = -psq[pc][s];
       }
   }
 }

@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #include <algorithm> // For std::min
@@ -27,13 +18,10 @@ namespace {
 
   // Polynomial material imbalance parameters
 
-  //                      pair  pawn knight bishop rook queen
-  const int Linear[6] = { 1667, -168, -1027, -166,  238, -138 };
-
   const int QuadraticOurs[][PIECE_TYPE_NB] = {
     //            OUR PIECES
     // pair pawn knight bishop rook queen
-    {   0                               }, // Bishop pair
+    {1667                               }, // Bishop pair
     {  40,    2                         }, // Pawn
     {  32,  255,  -3                    }, // Knight      OUR PIECES
     {   0,  104,   4,    0              }, // Bishop
@@ -96,7 +84,7 @@ namespace {
         if (!pieceCount[Us][pt1])
             continue;
 
-        int v = Linear[pt1];
+        int v = 0;
 
         for (int pt2 = NO_PIECE_TYPE; pt2 <= pt1; ++pt2)
             v +=  QuadraticOurs[pt1][pt2] * pieceCount[Us][pt2]

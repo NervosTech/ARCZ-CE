@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #include <fstream>
@@ -28,7 +19,7 @@ namespace {
 
 /// Version number. If Version is left empty, then compile date in the format
 /// DD-MM-YY and show in engine_info.
-static const string Version = "Nayeem 9.0";
+static const string Version = "Nayeem 10.0";
 
 /// Our fancy logging facility. The trick here is to replace cin.rdbuf() and
 /// cout.rdbuf() with two Tie objects that tie cin and cout to a file stream. We
@@ -113,7 +104,6 @@ const string engine_info(bool to_uci) {
      << (HasPext ? " BMI2" : (HasPopCnt ? " Mod" : ""))
      << (to_uci  ? "\nid author ": " by ")
      << "Mohamed Nayeem\n"
-	 << "Based : Stockfish\n"
      << "Tamilnadu,Ramanathapuram Dist,Kilakarai";
   ss << (to_uci ? "" : "\n\ninfo string ")
 	 << (to_uci ? "" : std::to_string(n))

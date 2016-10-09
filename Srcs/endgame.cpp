@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #include <algorithm>
@@ -255,8 +246,8 @@ Value Endgame<KRKP>::operator()(const Position& pos) const {
       result = Value(80) - 8 * distance(wksq, psq);
 
   else
-      result =  Value(200) - 8 * (  distance(wksq, psq + DELTA_S)
-                                  - distance(bksq, psq + DELTA_S)
+      result =  Value(200) - 8 * (  distance(wksq, psq + SOUTH)
+                                  - distance(bksq, psq + SOUTH)
                                   - distance(psq, queeningSq));
 
   return strongSide == pos.side_to_move() ? result : -result;
@@ -492,7 +483,7 @@ ScaleFactor Endgame<KRPKR>::operator()(const Position& pos) const {
   // If the defending king blocks the pawn and the attacking king is too far
   // away, it's a draw.
   if (   r <= RANK_5
-      && bksq == wpsq + DELTA_N
+      && bksq == wpsq + NORTH
       && distance(wksq, wpsq) - tempo >= 2
       && distance(wksq, brsq) - tempo >= 2)
       return SCALE_FACTOR_DRAW;
@@ -513,10 +504,10 @@ ScaleFactor Endgame<KRPKR>::operator()(const Position& pos) const {
       && file_of(wrsq) == f
       && wrsq < wpsq
       && (distance(wksq, queeningSq) < distance(bksq, queeningSq) - 2 + tempo)
-      && (distance(wksq, wpsq + DELTA_N) < distance(bksq, wpsq + DELTA_N) - 2 + tempo)
+      && (distance(wksq, wpsq + NORTH) < distance(bksq, wpsq + NORTH) - 2 + tempo)
       && (  distance(bksq, wrsq) + tempo >= 3
           || (    distance(wksq, queeningSq) < distance(bksq, wrsq) + tempo
-              && (distance(wksq, wpsq + DELTA_N) < distance(bksq, wrsq) + tempo))))
+              && (distance(wksq, wpsq + NORTH) < distance(bksq, wrsq) + tempo))))
       return ScaleFactor(  SCALE_FACTOR_MAX
                          - 8 * distance(wpsq, queeningSq)
                          - 2 * distance(wksq, queeningSq));

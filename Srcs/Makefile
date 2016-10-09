@@ -1,14 +1,8 @@
-# Nayeem - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
-# Nayeem is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# Nayeem is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# You should have received a copy of the GNU General Public License
-# along with Nayeem. If not, see <http://www.gnu.org/licenses/>.
+# Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+# Family  - Stockfish
+# Author  - Mohamed Nayeem
+# License - GPL-3.0
+
 
 
 ### ==========================================================================
@@ -26,12 +20,12 @@ PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-PGOBENCH = ./$(EXE) bench 16 1 1000 default time
+PGOBENCH = ./$(EXE) bench
 
 ### Object files
 OBJS = benchmark.o bitbase.o bitboard.o endgame.o evaluate.o main.o \
 	material.o misc.o movegen.o movepick.o pawns.o position.o psqt.o \
-	search.o thread.o timeman.o tt.o uci.o ucioption.o tzbook.o syzygy/tbprobe.o
+	search.o thread.o timeman.o tt.o uci.o ucioption.o syzygy/tbprobe.o
 
 ### ==========================================================================
 ### Section 2. High-level Configuration

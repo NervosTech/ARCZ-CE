@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #ifndef SEARCH_H_INCLUDED
@@ -21,11 +12,10 @@
 #include <vector>
 
 #include "misc.h"
-#include "position.h"
+#include "movepick.h"
 #include "types.h"
 
-template<typename T, bool CM> struct Stats;
-typedef Stats<Value, true> CounterMoveStats;
+class Position;
 
 namespace Search {
 
@@ -45,6 +35,7 @@ struct Stack {
   CounterMoveStats* counterMoves;
 };
 
+
 /// RootMove struct is used for moves at the root of the tree. For each root move
 /// we store a score and a PV (really a refutation in the case of moves which
 /// fail low). Score is normally set at -VALUE_INFINITE for all non-pv moves.
@@ -63,6 +54,7 @@ struct RootMove {
 };
 
 typedef std::vector<RootMove> RootMoves;
+
 
 /// LimitsType struct stores information sent by GUI about available time to
 /// search the current move, maximum depth/time, if we are in analysis mode or
@@ -85,8 +77,9 @@ struct LimitsType {
   TimePoint startTime;
 };
 
-/// The SignalsType struct stores atomic flags updated during the search
-/// typically in an async fashion e.g. to stop the search by the GUI.
+
+/// SignalsType struct stores atomic flags updated during the search, typically
+/// in an async fashion e.g. to stop the search by the GUI.
 
 struct SignalsType {
   std::atomic_bool stop, stopOnPonderhit;

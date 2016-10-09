@@ -1,17 +1,8 @@
 /*
-  Nayeem , a UCI chess playing engine derived from Stockfish
-  Nayeem  is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  Nayeem  is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+  Family  - Stockfish
+  Author  - Mohamed Nayeem
+  License - GPL-3.0
 */
 
 #ifndef MOVEPICK_H_INCLUDED
@@ -22,7 +13,6 @@
 
 #include "movegen.h"
 #include "position.h"
-#include "search.h"
 #include "types.h"
 
 
@@ -41,9 +31,7 @@ struct Stats {
   const T* operator[](Piece pc) const { return table[pc]; }
   T* operator[](Piece pc) { return table[pc]; }
   void clear() { std::memset(table, 0, sizeof(table)); }
-
   void update(Piece pc, Square to, Move m) { table[pc][to] = m; }
-
   void update(Piece pc, Square to, Value v) {
 
     if (abs(int(v)) >= 324)
@@ -64,24 +52,24 @@ typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
 
 struct FromToStats {
 
-    Value get(Color c, Move m) const { return table[c][from_sq(m)][to_sq(m)]; }
-    void clear() { std::memset(table, 0, sizeof(table)); }
+  Value get(Color c, Move m) const { return table[c][from_sq(m)][to_sq(m)]; }
+  void clear() { std::memset(table, 0, sizeof(table)); }
+  void update(Color c, Move m, Value v) {
 
-    void update(Color c, Move m, Value v)
-    {
-        if (abs(int(v)) >= 324)
-            return;
+    if (abs(int(v)) >= 324)
+        return;
 
-        Square f = from_sq(m);
-        Square t = to_sq(m);
+    Square from = from_sq(m);
+    Square to = to_sq(m);
 
-        table[c][f][t] -= table[c][f][t] * abs(int(v)) / 324;
-        table[c][f][t] += int(v) * 32;
-    }
+    table[c][from][to] -= table[c][from][to] * abs(int(v)) / 324;
+    table[c][from][to] += int(v) * 32;
+  }
 
 private:
-    Value table[COLOR_NB][SQUARE_NB][SQUARE_NB];
+  Value table[COLOR_NB][SQUARE_NB][SQUARE_NB];
 };
+
 
 /// MovePicker class is used to pick one pseudo legal move at a time from the
 /// current position. The most important method is next_move(), which returns a
@@ -89,6 +77,7 @@ private:
 /// when MOVE_NONE is returned. In order to improve the efficiency of the alpha
 /// beta algorithm, MovePicker attempts to return the moves which are most likely
 /// to get a cut-off first.
+namespace Search { struct Stack; }
 
 class MovePicker {
 public:
@@ -103,8 +92,7 @@ public:
 
 private:
   template<GenType> void score();
-  void generate_next_stage();
-  ExtMove* begin() { return moves; }
+  ExtMove* begin() { return cur; }
   ExtMove* end() { return endMoves; }
 
   const Position& pos;
@@ -112,12 +100,11 @@ private:
   Move countermove;
   Depth depth;
   Move ttMove;
-  ExtMove killers[3];
   Square recaptureSquare;
   Value threshold;
   int stage;
-  ExtMove* endBadCaptures = moves + MAX_MOVES - 1;
-  ExtMove moves[MAX_MOVES], *cur = moves, *endMoves = moves;
+  ExtMove *cur, *endMoves, *endBadCaptures;
+  ExtMove moves[MAX_MOVES];
 };
 
 #endif // #ifndef MOVEPICK_H_INCLUDED
