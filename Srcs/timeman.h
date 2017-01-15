@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0

@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -98,11 +98,11 @@ MovePicker::MovePicker(const Position& p, Move ttm, Value th)
 
   stage = PROBCUT;
 
-  // In ProbCut we generate captures with SEE higher than the given threshold
+  // In ProbCut we generate captures with SEE higher than or equal to the given threshold
   ttMove =   ttm
           && pos.pseudo_legal(ttm)
           && pos.capture(ttm)
-          && pos.see_ge(ttm, threshold + 1)? ttm : MOVE_NONE;
+          && pos.see_ge(ttm, threshold)? ttm : MOVE_NONE;
 
   stage += (ttMove == MOVE_NONE);
 }
@@ -128,27 +128,24 @@ template<>
 void MovePicker::score<QUIETS>() {
 
   const HistoryStats& history = pos.this_thread()->history;
-  const FromToStats& fromTo = pos.this_thread()->fromTo;
 
-  const CounterMoveStats* cm = (ss-1)->counterMoves;
-  const CounterMoveStats* fm = (ss-2)->counterMoves;
-  const CounterMoveStats* f2 = (ss-4)->counterMoves;
+  const CounterMoveStats* cmh = (ss-1)->counterMoves;
+  const CounterMoveStats* fmh = (ss-2)->counterMoves;
+  const CounterMoveStats* fmh2 = (ss-4)->counterMoves;
 
   Color c = pos.side_to_move();
 
   for (auto& m : *this)
-      m.value =      history[pos.moved_piece(m)][to_sq(m)]
-               + (cm ? (*cm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + (fm ? (*fm)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + (f2 ? (*f2)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
-               + fromTo.get(c, m);
+      m.value =  (cmh  ?  (*cmh)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
+               + (fmh  ?  (*fmh)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
+               + (fmh2 ? (*fmh2)[pos.moved_piece(m)][to_sq(m)] : VALUE_ZERO)
+               + history.get(c, m);
 }
 
 template<>
 void MovePicker::score<EVASIONS>() {
-  // Try captures ordered by MVV/LVA, then non-captures ordered by history value
+  // Try captures ordered by MVV/LVA, then non-captures ordered by stats heuristics
   const HistoryStats& history = pos.this_thread()->history;
-  const FromToStats& fromTo = pos.this_thread()->fromTo;
   Color c = pos.side_to_move();
 
   for (auto& m : *this)
@@ -156,7 +153,7 @@ void MovePicker::score<EVASIONS>() {
           m.value =  PieceValue[MG][pos.piece_on(to_sq(m))]
                    - Value(type_of(pos.moved_piece(m))) + HistoryStats::Max;
       else
-          m.value = history[pos.moved_piece(m)][to_sq(m)] + fromTo.get(c, m);
+          m.value = history.get(c, m);
 }
 
 
@@ -258,8 +255,7 @@ Move MovePicker::next_move() {
   case EVASIONS_INIT:
       cur = moves;
       endMoves = generate<EVASIONS>(pos, cur);
-      if (endMoves - cur - (ttMove != MOVE_NONE) > 1)
-          score<EVASIONS>();
+      score<EVASIONS>();
       ++stage;
 
   case ALL_EVASIONS:
@@ -282,7 +278,7 @@ Move MovePicker::next_move() {
       {
           move = pick_best(cur++, endMoves);
           if (   move != ttMove
-              && pos.see_ge(move, threshold + 1))
+              && pos.see_ge(move, threshold))
               return move;
       }
       break;

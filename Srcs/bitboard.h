@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -278,7 +278,7 @@ inline Square lsb(Bitboard b) {
 
 inline Square msb(Bitboard b) {
   assert(b);
-  return Square(63 - __builtin_clzll(b));
+  return Square(63 ^ __builtin_clzll(b));
 }
 
 #elif defined(_WIN64) && defined(_MSC_VER)

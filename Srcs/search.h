@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -25,14 +25,14 @@ namespace Search {
 
 struct Stack {
   Move* pv;
+  CounterMoveStats* counterMoves;
   int ply;
   Move currentMove;
   Move excludedMove;
   Move killers[2];
   Value staticEval;
-  bool skipEarlyPruning;
+  Value history;
   int moveCount;
-  CounterMoveStats* counterMoves;
 };
 
 

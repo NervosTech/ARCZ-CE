@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -75,7 +75,7 @@ const vector<string> Defaults = {
 
 } // namespace
 
-/// benchmark() runs a simple benchmark by letting Nayeem analyze a set
+/// benchmark() runs a simple benchmark by letting Stockfish analyze a set
 /// of positions for a given limit each. There are five parameters: the
 /// transposition table size, the number of search threads that should
 /// be used, the limit value spent for each position (optional, default is
@@ -104,7 +104,7 @@ void benchmark(const Position& current, istream& is) {
       limits.movetime = stoi(limit); // movetime is in millisecs
 
   else if (limitType == "nodes")
-      limits.nodes = stoi(limit);
+      limits.nodes = stoll(limit);
 
   else if (limitType == "mate")
       limits.mate = stoi(limit);

@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -39,32 +39,35 @@ namespace {
     S(17, 16), S(33, 32), S(0, 0), S(0, 0)
   };
 
-  // Weakness of our pawn shelter in front of the king by [distance from edge][rank]
+  // Weakness of our pawn shelter in front of the king by [distance from edge][rank].
+  // RANK_1 = 0 is used for files where we have no pawns, or where our pawn is behind our king.
   const Value ShelterWeakness[][RANK_NB] = {
-    { V( 97), V(21), V(26), V(51), V(87), V( 89), V( 99) },
-    { V(120), V( 0), V(28), V(76), V(88), V(103), V(104) },
-    { V(101), V( 7), V(54), V(78), V(77), V( 92), V(101) },
-    { V( 80), V(11), V(44), V(68), V(87), V( 90), V(119) }
+    { V(100), V(20), V(10), V(46), V(82), V( 86), V( 98) },
+    { V(116), V( 4), V(28), V(87), V(94), V(108), V(104) },
+    { V(109), V( 1), V(59), V(87), V(62), V( 91), V(116) },
+    { V( 75), V(12), V(43), V(59), V(90), V( 84), V(112) }
   };
 
-  // Danger of enemy pawns moving toward our king by [type][distance from edge][rank]
+  // Danger of enemy pawns moving toward our king by [type][distance from edge][rank].
+  // For the unopposed and unblocked cases, RANK_1 = 0 is used when opponent has no pawn
+  // on the given file, or his pawn his behind our king.
   const Value StormDanger[][4][RANK_NB] = {
-    { { V( 0),  V(  67), V( 134), V(38), V(32) },
-      { V( 0),  V(  57), V( 139), V(37), V(22) },
-      { V( 0),  V(  43), V( 115), V(43), V(27) },
-      { V( 0),  V(  68), V( 124), V(57), V(32) } },
-    { { V(20),  V(  43), V( 100), V(56), V(20) },
-      { V(23),  V(  20), V(  98), V(40), V(15) },
-      { V(23),  V(  39), V( 103), V(36), V(18) },
-      { V(28),  V(  19), V( 108), V(42), V(26) } },
-    { { V( 0),  V(   0), V(  75), V(14), V( 2) },
-      { V( 0),  V(   0), V( 150), V(30), V( 4) },
-      { V( 0),  V(   0), V( 160), V(22), V( 5) },
-      { V( 0),  V(   0), V( 166), V(24), V(13) } },
-    { { V( 0),  V(-283), V(-281), V(57), V(31) },
-      { V( 0),  V(  58), V( 141), V(39), V(18) },
-      { V( 0),  V(  65), V( 142), V(48), V(32) },
-      { V( 0),  V(  60), V( 126), V(51), V(19) } }
+    { { V( 0),  V(-290), V(-274), V(57), V(41) },  //BlockedByKing
+      { V( 0),  V(  60), V( 144), V(39), V(13) },
+      { V( 0),  V(  65), V( 141), V(41), V(34) },
+      { V( 0),  V(  53), V( 127), V(56), V(14) } },
+    { { V( 4),  V(  73), V( 132), V(46), V(31) },  //Unopposed
+      { V( 1),  V(  64), V( 143), V(26), V(13) },
+      { V( 1),  V(  47), V( 110), V(44), V(24) },
+      { V( 0),  V(  72), V( 127), V(50), V(31) } },
+    { { V( 0),  V(   0), V(  79), V(23), V( 1) },  //BlockedByPawn
+      { V( 0),  V(   0), V( 148), V(27), V( 2) },
+      { V( 0),  V(   0), V( 161), V(16), V( 1) },
+      { V( 0),  V(   0), V( 171), V(22), V(15) } },
+    { { V(22),  V(  45), V( 104), V(62), V( 6) },  //Unblocked
+      { V(31),  V(  30), V(  99), V(39), V(19) },
+      { V(23),  V(  29), V(  96), V(41), V(15) },
+      { V(21),  V(  23), V( 116), V(41), V(15) } }
   };
 
   // Max bonus for king safety. Corresponds to start position with all the pawns
@@ -183,7 +186,7 @@ void init() {
   {
       int v = (Seed[r] + (phalanx ? (Seed[r + 1] - Seed[r]) / 2 : 0)) >> opposed;
       v += (apex ? v / 2 : 0);
-      Connected[opposed][phalanx][apex][r] = make_score(v, v * 5 / 8);
+      Connected[opposed][phalanx][apex][r] = make_score(v, v * (r-2) / 4);
   }
 }
 
@@ -210,14 +213,14 @@ Entry* probe(const Position& pos) {
 
 
 /// Entry::shelter_storm() calculates shelter and storm penalties for the file
-/// the king is on, as well as the two adjacent files.
+/// the king is on, as well as the two closest files.
 
 template<Color Us>
 Value Entry::shelter_storm(const Position& pos, Square ksq) {
 
   const Color Them = (Us == WHITE ? BLACK : WHITE);
 
-  enum { NoFriendlyPawn, Unblocked, BlockedByPawn, BlockedByKing };
+  enum { BlockedByKing, Unopposed, BlockedByPawn, Unblocked };
 
   Bitboard b = pos.pieces(PAWN) & (in_front_bb(Us, rank_of(ksq)) | rank_bb(ksq));
   Bitboard ourPawns = b & pos.pieces(Us);
@@ -236,7 +239,7 @@ Value Entry::shelter_storm(const Position& pos, Square ksq) {
       safety -=  ShelterWeakness[std::min(f, FILE_H - f)][rkUs]
                + StormDanger
                  [f == file_of(ksq) && rkThem == relative_rank(Us, ksq) + 1 ? BlockedByKing  :
-                  rkUs   == RANK_1                                          ? NoFriendlyPawn :
+                  rkUs   == RANK_1                                          ? Unopposed :
                   rkThem == rkUs + 1                                        ? BlockedByPawn  : Unblocked]
                  [std::min(f, FILE_H - f)][rkThem];
   }

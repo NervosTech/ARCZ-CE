@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -14,6 +14,7 @@
 #include "tt.h"
 #include "uci.h"
 #include "syzygy/tbprobe.h"
+#include "tzbook.h"
 
 namespace PSQT {
   void init();
@@ -32,6 +33,7 @@ int main(int argc, char* argv[]) {
   Pawns::init();
   Threads.init();
   Tablebases::init(Options["SyzygyPath"]);
+  tzbook.init(Options["BookPath"]);
   TT.resize(Options["Hash"]);
 
   UCI::loop(argc, argv);

@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -83,5 +83,16 @@ public:
   template<typename T> T sparse_rand()
   { return T(rand64() & rand64() & rand64()); }
 };
+
+
+/// Under Windows it is not possible for a process to run on more than one
+/// logical processor group. This usually means to be limited to use max 64
+/// cores. To overcome this, some special platform specific API should be
+/// called to set group affinity for each thread. Original code from Texel by
+/// Peter Österlund.
+
+namespace WinProcGroup {
+  void bindThisThread(size_t idx);
+}
 
 #endif // #ifndef MISC_H_INCLUDED

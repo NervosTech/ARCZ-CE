@@ -1,5 +1,5 @@
 /*
-  Nayeem  - A UCI chess engine. Copyright (C) 2013-2015 Mohamed Nayeem
+Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -83,7 +83,8 @@ class TranspositionTable {
   static_assert(CacheLineSize % sizeof(Cluster) == 0, "Cluster size incorrect");
 
 public:
- ~TranspositionTable() { free(mem); }
+  TranspositionTable() { mbSize_last_used = 0;  mbSize_last_used = 0; }
+ ~TranspositionTable() {}
   void new_search() { generation8 += 4; } // Lower 2 bits are used by Bound
   uint8_t generation() const { return generation8; }
   TTEntry* probe(const Key key, bool& found) const;
@@ -97,6 +98,8 @@ public:
   }
 
 private:
+  int64_t  mbSize_last_used;
+  bool large_pages_used;
   size_t clusterCount;
   Cluster* table;
   void* mem;
