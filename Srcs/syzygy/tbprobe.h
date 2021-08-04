@@ -1,5 +1,5 @@
 /*
-Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
+  Nayeem  - A UCI chess engine Based on Stockfish. Copyright (C) 2013-2021 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -12,7 +12,7 @@ Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
 
 #include "../search.h"
 
-namespace Tablebases {
+namespace Stockfish::Tablebases {
 
 enum WDLScore {
     WDLLoss        = -2, // Loss
@@ -37,9 +37,9 @@ extern int MaxCardinality;
 void init(const std::string& paths);
 WDLScore probe_wdl(Position& pos, ProbeState* result);
 int probe_dtz(Position& pos, ProbeState* result);
-bool root_probe(Position& pos, Search::RootMoves& rootMoves, Value& score);
-bool root_probe_wdl(Position& pos, Search::RootMoves& rootMoves, Value& score);
-void filter_root_moves(Position& pos, Search::RootMoves& rootMoves);
+bool root_probe(Position& pos, Search::RootMoves& rootMoves);
+bool root_probe_wdl(Position& pos, Search::RootMoves& rootMoves);
+void rank_root_moves(Position& pos, Search::RootMoves& rootMoves);
 
 inline std::ostream& operator<<(std::ostream& os, const WDLScore v) {
 
@@ -62,6 +62,6 @@ inline std::ostream& operator<<(std::ostream& os, const ProbeState v) {
     return os;
 }
 
-}
+} // namespace Stockfish::Tablebases
 
 #endif
