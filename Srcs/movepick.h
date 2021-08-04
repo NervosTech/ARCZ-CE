@@ -1,5 +1,5 @@
 /*
-Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
+  Nayeem  - A UCI chess engine Based on Stockfish. Copyright (C) 2013-2021 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -8,103 +8,145 @@ Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
 #ifndef MOVEPICK_H_INCLUDED
 #define MOVEPICK_H_INCLUDED
 
-#include <algorithm> // For std::max
-#include <cstring>   // For std::memset
+#include <array>
+#include <limits>
+#include <type_traits>
 
 #include "movegen.h"
 #include "position.h"
 #include "types.h"
 
+namespace Stockfish {
 
-/// HistoryStats records how often quiet moves have been successful or unsuccessful
-/// during the current search, and is used for reduction and move ordering decisions.
-struct HistoryStats {
+/// StatsEntry stores the stat table value. It is usually a number but could
+/// be a move or even a nested history. We use a class instead of naked value
+/// to directly call history update operator<<() on the entry so to use stats
+/// tables at caller sites as simple multi-dim arrays.
+template<typename T, int D>
+class StatsEntry {
 
-  static const Value Max = Value(1 << 28);
+  T entry;
 
-  Value get(Color c, Move m) const { return table[c][from_sq(m)][to_sq(m)]; }
-  void clear() { std::memset(table, 0, sizeof(table)); }
-  void update(Color c, Move m, Value v) {
+public:
+  void operator=(const T& v) { entry = v; }
+  T* operator&() { return &entry; }
+  T* operator->() { return &entry; }
+  operator const T&() const { return entry; }
 
-    if (abs(int(v)) >= 324)
-        return;
+  void operator<<(int bonus) {
+    assert(abs(bonus) <= D); // Ensure range is [-D, D]
+    static_assert(D <= std::numeric_limits<T>::max(), "D overflows T");
 
-    Square from = from_sq(m);
-    Square to = to_sq(m);
+    entry += bonus - entry * abs(bonus) / D;
 
-    table[c][from][to] -= table[c][from][to] * abs(int(v)) / 324;
-    table[c][from][to] += int(v) * 32;
+    assert(abs(entry) <= D);
   }
-
-private:
-  Value table[COLOR_NB][SQUARE_NB][SQUARE_NB];
 };
 
+/// Stats is a generic N-dimensional array used to store various statistics.
+/// The first template parameter T is the base type of the array, the second
+/// template parameter D limits the range of updates in [-D, D] when we update
+/// values with the << operator, while the last parameters (Size and Sizes)
+/// encode the dimensions of the array.
+template <typename T, int D, int Size, int... Sizes>
+struct Stats : public std::array<Stats<T, D, Sizes...>, Size>
+{
+  typedef Stats<T, D, Size, Sizes...> stats;
 
-/// A template struct, used to generate MoveStats and CounterMoveHistoryStats:
-/// MoveStats store the move that refute a previous one.
-/// CounterMoveHistoryStats is like HistoryStats, but with two consecutive moves.
-/// Entries are stored using only the moving piece and destination square, hence
-/// two moves with different origin but same destination and piece will be
-/// considered identical.
-template<typename T>
-struct Stats {
-  const T* operator[](Piece pc) const { return table[pc]; }
-  T* operator[](Piece pc) { return table[pc]; }
-  void clear() { std::memset(table, 0, sizeof(table)); }
-  void update(Piece pc, Square to, Move m) { table[pc][to] = m; }
-  void update(Piece pc, Square to, Value v) {
+  void fill(const T& v) {
 
-    if (abs(int(v)) >= 324)
-        return;
+    // For standard-layout 'this' points to first struct member
+    assert(std::is_standard_layout<stats>::value);
 
-    table[pc][to] -= table[pc][to] * abs(int(v)) / 936;
-    table[pc][to] += int(v) * 32;
+    typedef StatsEntry<T, D> entry;
+    entry* p = reinterpret_cast<entry*>(this);
+    std::fill(p, p + sizeof(*this) / sizeof(entry), v);
   }
-
-private:
-  T table[PIECE_NB][SQUARE_NB];
 };
 
-typedef Stats<Move> MoveStats;
-typedef Stats<Value> CounterMoveStats;
-typedef Stats<CounterMoveStats> CounterMoveHistoryStats;
+template <typename T, int D, int Size>
+struct Stats<T, D, Size> : public std::array<StatsEntry<T, D>, Size> {};
+
+/// In stats table, D=0 means that the template parameter is not used
+enum StatsParams { NOT_USED = 0 };
+enum StatsType { NoCaptures, Captures };
+
+/// ButterflyHistory records how often quiet moves have been successful or
+/// unsuccessful during the current search, and is used for reduction and move
+/// ordering decisions. It uses 2 tables (one for each color) indexed by
+/// the move's from and to squares, see www.chessprogramming.org/Butterfly_Boards
+typedef Stats<int16_t, 13365, COLOR_NB, int(SQUARE_NB) * int(SQUARE_NB)> ButterflyHistory;
+
+/// At higher depths LowPlyHistory records successful quiet moves near the root
+/// and quiet moves which are/were in the PV (ttPv). It is cleared with each new
+/// search and filled during iterative deepening.
+constexpr int MAX_LPH = 4;
+typedef Stats<int16_t, 10692, MAX_LPH, int(SQUARE_NB) * int(SQUARE_NB)> LowPlyHistory;
+
+/// CounterMoveHistory stores counter moves indexed by [piece][to] of the previous
+/// move, see www.chessprogramming.org/Countermove_Heuristic
+typedef Stats<Move, NOT_USED, PIECE_NB, SQUARE_NB> CounterMoveHistory;
+
+/// CapturePieceToHistory is addressed by a move's [piece][to][captured piece type]
+typedef Stats<int16_t, 10692, PIECE_NB, SQUARE_NB, PIECE_TYPE_NB> CapturePieceToHistory;
+
+/// PieceToHistory is like ButterflyHistory but is addressed by a move's [piece][to]
+typedef Stats<int16_t, 29952, PIECE_NB, SQUARE_NB> PieceToHistory;
+
+/// ContinuationHistory is the combined history of a given pair of moves, usually
+/// the current one given a previous one. The nested history table is based on
+/// PieceToHistory instead of ButterflyBoards.
+typedef Stats<PieceToHistory, NOT_USED, PIECE_NB, SQUARE_NB> ContinuationHistory;
 
 
-/// MovePicker class is used to pick one pseudo legal move at a time from the
+/// MovePicker class is used to pick one pseudo-legal move at a time from the
 /// current position. The most important method is next_move(), which returns a
-/// new pseudo legal move each time it is called, until there are no moves left,
-/// when MOVE_NONE is returned. In order to improve the efficiency of the alpha
-/// beta algorithm, MovePicker attempts to return the moves which are most likely
-/// to get a cut-off first.
-namespace Search { struct Stack; }
-
+/// new pseudo-legal move each time it is called, until there are no moves left,
+/// when MOVE_NONE is returned. In order to improve the efficiency of the
+/// alpha-beta algorithm, MovePicker attempts to return the moves which are most
+/// likely to get a cut-off first.
 class MovePicker {
+
+  enum PickType { Next, Best };
+
 public:
   MovePicker(const MovePicker&) = delete;
   MovePicker& operator=(const MovePicker&) = delete;
-
-  MovePicker(const Position&, Move, Value);
-  MovePicker(const Position&, Move, Depth, Square);
-  MovePicker(const Position&, Move, Depth, Search::Stack*);
-
-  Move next_move();
+  MovePicker(const Position&, Move, Value, const CapturePieceToHistory*);
+  MovePicker(const Position&, Move, Depth, const ButterflyHistory*,
+                                           const CapturePieceToHistory*,
+                                           const PieceToHistory**,
+                                           Square);
+  MovePicker(const Position&, Move, Depth, const ButterflyHistory*,
+                                           const LowPlyHistory*,
+                                           const CapturePieceToHistory*,
+                                           const PieceToHistory**,
+                                           Move,
+                                           const Move*,
+                                           int);
+  Move next_move(bool skipQuiets = false);
 
 private:
+  template<PickType T, typename Pred> Move select(Pred);
   template<GenType> void score();
   ExtMove* begin() { return cur; }
   ExtMove* end() { return endMoves; }
 
   const Position& pos;
-  const Search::Stack* ss;
-  Move countermove;
-  Depth depth;
+  const ButterflyHistory* mainHistory;
+  const LowPlyHistory* lowPlyHistory;
+  const CapturePieceToHistory* captureHistory;
+  const PieceToHistory** continuationHistory;
   Move ttMove;
+  ExtMove refutations[3], *cur, *endMoves, *endBadCaptures;
+  int stage;
   Square recaptureSquare;
   Value threshold;
-  int stage;
-  ExtMove *cur, *endMoves, *endBadCaptures;
+  Depth depth;
+  int ply;
   ExtMove moves[MAX_MOVES];
 };
+
+} // namespace Stockfish
 
 #endif // #ifndef MOVEPICK_H_INCLUDED

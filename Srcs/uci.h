@@ -1,5 +1,5 @@
 /*
-Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
+  Nayeem  - A UCI chess engine Based on Stockfish. Copyright (C) 2013-2021 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -12,6 +12,8 @@ Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
 #include <string>
 
 #include "types.h"
+
+namespace Stockfish {
 
 class Position;
 
@@ -36,12 +38,14 @@ public:
   Option(OnChange = nullptr);
   Option(bool v, OnChange = nullptr);
   Option(const char* v, OnChange = nullptr);
-  Option(int v, int minv, int maxv, OnChange = nullptr);
+  Option(double v, int minv, int maxv, OnChange = nullptr);
+  Option(const char* v, const char* cur, OnChange = nullptr);
 
   Option& operator=(const std::string&);
   void operator<<(const Option&);
-  operator int() const;
+  operator double() const;
   operator std::string() const;
+  bool operator==(const char*) const;
 
 private:
   friend std::ostream& operator<<(std::ostream&, const OptionsMap&);
@@ -58,10 +62,13 @@ std::string value(Value v);
 std::string square(Square s);
 std::string move(Move m, bool chess960);
 std::string pv(const Position& pos, Depth depth, Value alpha, Value beta);
+std::string wdl(Value v, int ply);
 Move to_move(const Position& pos, std::string& str);
 
 } // namespace UCI
 
 extern UCI::OptionsMap Options;
+
+} // namespace Stockfish
 
 #endif // #ifndef UCI_H_INCLUDED

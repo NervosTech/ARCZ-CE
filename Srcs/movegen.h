@@ -1,5 +1,5 @@
 /*
-Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
+  Nayeem  - A UCI chess engine Based on Stockfish. Copyright (C) 2013-2021 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -8,7 +8,11 @@ Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
 #ifndef MOVEGEN_H_INCLUDED
 #define MOVEGEN_H_INCLUDED
 
+#include <algorithm>
+
 #include "types.h"
+
+namespace Stockfish {
 
 class Position;
 
@@ -23,10 +27,14 @@ enum GenType {
 
 struct ExtMove {
   Move move;
-  Value value;
+  int value;
 
   operator Move() const { return move; }
   void operator=(Move m) { move = m; }
+
+  // Inhibit unwanted implicit conversions to Move
+  // with an ambiguity that yields to a compile error.
+  operator float() const = delete;
 };
 
 inline bool operator<(const ExtMove& f, const ExtMove& s) {
@@ -46,12 +54,13 @@ struct MoveList {
   const ExtMove* end() const { return last; }
   size_t size() const { return last - moveList; }
   bool contains(Move move) const {
-    for (const auto& m : *this) if (m == move) return true;
-    return false;
+    return std::find(begin(), end(), move) != end();
   }
 
 private:
   ExtMove moveList[MAX_MOVES], *last;
 };
+
+} // namespace Stockfish
 
 #endif // #ifndef MOVEGEN_H_INCLUDED

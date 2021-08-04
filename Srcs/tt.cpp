@@ -1,5 +1,5 @@
 /*
-Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
+  Nayeem  - A UCI chess engine Based on Stockfish. Copyright (C) 2013-2021 Mohamed Nayeem
   Family  - Stockfish
   Author  - Mohamed Nayeem
   License - GPL-3.0
@@ -7,64 +7,41 @@ Nayeem  - A UCI chess engine. Copyright (C) 2013-2017 Mohamed Nayeem
 
 #include <cstring>   // For std::memset
 #include <iostream>
+#include <thread>
 
 #include "bitboard.h"
+#include "misc.h"
+#include "thread.h"
 #include "tt.h"
 #include "uci.h"
-#include "windows.h"
+
+namespace Stockfish {
 
 TranspositionTable TT; // Our global transposition table
-int use_large_pages = -1;
-int got_privileges = -1;
 
+/// TTEntry::save() populates the TTEntry with a new node's data, possibly
+/// overwriting an old position. Update is not atomic and can be racy.
 
-bool Get_LockMemory_Privileges()
-{
-    HANDLE TH, PROC7;
-    TOKEN_PRIVILEGES tp;
-    bool ret = false;
+void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) {
 
-    PROC7 = GetCurrentProcess();
-    if (OpenProcessToken(PROC7, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &TH))
-    {
-        if (LookupPrivilegeValue(NULL, TEXT("SeLockMemoryPrivilege"), &tp.Privileges[0].Luid))
-        {
-            tp.PrivilegeCount = 1;
-            tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-            if (AdjustTokenPrivileges(TH, FALSE, &tp, 0, NULL, 0))
-            {
-                if (GetLastError() != ERROR_NOT_ALL_ASSIGNED)
-                    ret = true;
-            }
-        }
-        CloseHandle(TH);
-    }
-    return ret;
-}
+  // Preserve any existing move for the same position
+  if (m || (uint16_t)k != key16)
+      move16 = (uint16_t)m;
 
+  // Overwrite less valuable entries (cheapest checks first)
+  if (b == BOUND_EXACT
+      || (uint16_t)k != key16
+      || d - DEPTH_OFFSET > depth8 - 4)
+  {
+      assert(d > DEPTH_OFFSET);
+      assert(d < 256 + DEPTH_OFFSET);
 
-void Try_Get_LockMemory_Privileges()
-{
-    use_large_pages = 0;
-
-    if (Options["Large Pages"] == false)    
-        return;
-
-    if (got_privileges == -1)
-    {
-        if (Get_LockMemory_Privileges() == true)
-            got_privileges = 1;
-        else
-        {
-            sync_cout << "No Privilege for Large Pages" << sync_endl;
-            got_privileges = 0;
-        }
-    }
-
-    if (got_privileges == 0)      
-        return;
-
-    use_large_pages = 1;        
+      key16     = (uint16_t)k;
+      depth8    = (uint8_t)(d - DEPTH_OFFSET);
+      genBound8 = (uint8_t)(TT.generation8 | uint8_t(pv) << 2 | b);
+      value16   = (int16_t)v;
+      eval16    = (int16_t)ev;
+  }
 }
 
 
@@ -74,89 +51,51 @@ void Try_Get_LockMemory_Privileges()
 
 void TranspositionTable::resize(size_t mbSize) {
 
-  if (mbSize == 0)
-      mbSize = mbSize_last_used;
+  Threads.main()->wait_for_search_finished();
 
-  if (mbSize == 0)
-      return;
+  aligned_large_pages_free(table);
 
-  mbSize_last_used = mbSize;
+  clusterCount = mbSize * 1024 * 1024 / sizeof(Cluster);
 
-  Try_Get_LockMemory_Privileges();
-
-  size_t newClusterCount = size_t(1) << msb((mbSize * 1024 * 1024) / sizeof(Cluster));
-
-  if (newClusterCount == clusterCount)
-  {
-      if ((use_large_pages == 1) && (large_pages_used))      
-          return;
-      if ((use_large_pages == 0) && (large_pages_used == false))
-          return;
-  }
-
-  clusterCount = newClusterCount;
- 
-  if (use_large_pages < 1)
-  {
-      if (mem != NULL)
-      {
-          if (large_pages_used)
-              VirtualFree(mem, 0, MEM_RELEASE);
-          else          
-              free(mem);
-      }
-      uint64_t memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
-      mem = calloc(memsize, 1);
-      large_pages_used = false;
-  }
-  else
-  {
-      if (mem != NULL)
-      {
-          if (large_pages_used)
-              VirtualFree(mem, 0, MEM_RELEASE);
-          else
-              free(mem);
-      }
-
-      int64_t memsize = clusterCount * sizeof(Cluster);
-      mem = VirtualAlloc(NULL, memsize, MEM_LARGE_PAGES | MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-      if (mem == NULL)
-      {
-          std::cerr << "Failed to allocate " << mbSize
-              << "MB Large Page Memory for transposition table, switching to default" << std::endl;
-
-          use_large_pages = 0;
-          memsize = clusterCount * sizeof(Cluster) + CacheLineSize - 1;
-          mem = calloc(memsize, 1);
-          large_pages_used = false;
-      }
-      else
-      {
-          sync_cout << "info string Hash LargePages " << (memsize >> 20) << " Mb" << sync_endl;
-          large_pages_used = true;
-      }
-        
-  }
-
-  if (!mem)
+  table = static_cast<Cluster*>(aligned_large_pages_alloc(clusterCount * sizeof(Cluster)));
+  if (!table)
   {
       std::cerr << "Failed to allocate " << mbSize
                 << "MB for transposition table." << std::endl;
       exit(EXIT_FAILURE);
   }
 
-  table = (Cluster*)((uintptr_t(mem) + CacheLineSize - 1) & ~(CacheLineSize - 1));
+  clear();
 }
 
 
-/// TranspositionTable::clear() overwrites the entire transposition table
-/// with zeros. It is called whenever the table is resized, or when the
-/// user asks the program to clear the table (from the UCI interface).
+/// TranspositionTable::clear() initializes the entire transposition table to zero,
+//  in a multi-threaded way.
 
 void TranspositionTable::clear() {
 
-  std::memset(table, 0, clusterCount * sizeof(Cluster));
+  std::vector<std::thread> threads;
+
+  for (size_t idx = 0; idx < Options["Threads"]; ++idx)
+  {
+      threads.emplace_back([this, idx]() {
+
+          // Thread binding gives faster search on systems with a first-touch policy
+          if (Options["Threads"] > 8)
+              WinProcGroup::bindThisThread(idx);
+
+          // Each thread will zero its part of the hash table
+          const size_t stride = size_t(clusterCount / Options["Threads"]),
+                       start  = size_t(stride * idx),
+                       len    = idx != Options["Threads"] - 1 ?
+                                stride : clusterCount - start;
+
+          std::memset(&table[start], 0, len * sizeof(Cluster));
+      });
+  }
+
+  for (std::thread& th : threads)
+      th.join();
 }
 
 
@@ -170,26 +109,26 @@ void TranspositionTable::clear() {
 TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
 
   TTEntry* const tte = first_entry(key);
-  const uint16_t key16 = key >> 48;  // Use the high 16 bits as key inside the cluster
+  const uint16_t key16 = (uint16_t)key;  // Use the low 16 bits as key inside the cluster
 
   for (int i = 0; i < ClusterSize; ++i)
-      if (!tte[i].key16 || tte[i].key16 == key16)
+      if (tte[i].key16 == key16 || !tte[i].depth8)
       {
-          if ((tte[i].genBound8 & 0xFC) != generation8 && tte[i].key16)
-              tte[i].genBound8 = uint8_t(generation8 | tte[i].bound()); // Refresh
+          tte[i].genBound8 = uint8_t(generation8 | (tte[i].genBound8 & (GENERATION_DELTA - 1))); // Refresh
 
-          return found = (bool)tte[i].key16, &tte[i];
+          return found = (bool)tte[i].depth8, &tte[i];
       }
 
   // Find an entry to be replaced according to the replacement strategy
   TTEntry* replace = tte;
   for (int i = 1; i < ClusterSize; ++i)
       // Due to our packed storage format for generation and its cyclic
-      // nature we add 259 (256 is the modulus plus 3 to keep the lowest
-      // two bound bits from affecting the result) to calculate the entry
-      // age correctly even after generation8 overflows into the next cycle.
-      if (  replace->depth8 - ((259 + generation8 - replace->genBound8) & 0xFC) * 2
-          >   tte[i].depth8 - ((259 + generation8 -   tte[i].genBound8) & 0xFC) * 2)
+      // nature we add GENERATION_CYCLE (256 is the modulus, plus what
+      // is needed to keep the unrelated lowest n bits from affecting
+      // the result) to calculate the entry age correctly even after
+      // generation8 overflows into the next cycle.
+      if (  replace->depth8 - ((GENERATION_CYCLE + generation8 - replace->genBound8) & GENERATION_MASK)
+          >   tte[i].depth8 - ((GENERATION_CYCLE + generation8 -   tte[i].genBound8) & GENERATION_MASK))
           replace = &tte[i];
 
   return found = false, replace;
@@ -202,12 +141,11 @@ TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
 int TranspositionTable::hashfull() const {
 
   int cnt = 0;
-  for (int i = 0; i < 1000 / ClusterSize; i++)
-  {
-      const TTEntry* tte = &table[i].entry[0];
-      for (int j = 0; j < ClusterSize; j++)
-          if ((tte[j].genBound8 & 0xFC) == generation8)
-              cnt++;
-  }
-  return cnt;
+  for (int i = 0; i < 1000; ++i)
+      for (int j = 0; j < ClusterSize; ++j)
+          cnt += table[i].entry[j].depth8 && (table[i].entry[j].genBound8 & GENERATION_MASK) == generation8;
+
+  return cnt / ClusterSize;
 }
+
+} // namespace Stockfish
